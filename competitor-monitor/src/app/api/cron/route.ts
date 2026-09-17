@@ -1,6 +1,6 @@
-import { runDueScrapes } from "@/lib/scheduler";
+import { runDailyMorningScrapes } from "@/lib/scheduler";
 
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 function authorized(request: Request): boolean {
   const secret = process.env.CRON_SECRET;
@@ -14,6 +14,12 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  await runDueScrapes();
-  return Response.json({ ok: true, ranAt: new Date().toISOString() });
+  // Vercel cron: daily at 09:00 Asia/Karachi (UTC+5) => 04:00 UTC
+  const ran = await runDailyMorningScrapes();
+  return Response.json({
+    ok: true,
+    ran,
+    mode: "daily-9am",
+    ranAt: new Date().toISOString(),
+  });
 }

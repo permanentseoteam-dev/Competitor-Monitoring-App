@@ -60,6 +60,9 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setError(null);
     try {
+      // Explicitly run due scrapes, then refresh data.
+      await fetch("/api/tick", { method: "POST" }).catch(() => null);
+
       const [cRes, pRes] = await Promise.all([
         fetch("/api/competitors"),
         fetch(
@@ -85,11 +88,21 @@ export default function Dashboard() {
     }
   }, [filterCompetitorId]);
 
+  const pollMs = useMemo(() => {
+    const now = Date.now();
+    const dueOrSoon = competitors.some((c) => {
+      if (!c.enabled || !c.nextScrapeAt) return false;
+      return new Date(c.nextScrapeAt).getTime() <= now + 60_000;
+    });
+    // Poll faster around / after Next time so auto-scrape actually fires.
+    return dueOrSoon ? 15_000 : 30_000;
+  }, [competitors]);
+
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void load(), 30_000);
+    const id = window.setInterval(() => void load(), pollMs);
     return () => window.clearInterval(id);
-  }, [load]);
+  }, [load, pollMs]);
 
   const lastActivity = useMemo(() => {
     const stamps = competitors
@@ -214,8 +227,9 @@ export default function Dashboard() {
           <p className="eyebrow">Always-on monitor</p>
           <h1>Competitor Monitor</h1>
           <p className="lede">
-            Add store sitemap URLs. We baseline once, then surface only newly
-            listed product URLs on a schedule you choose.
+            Add store sitemap URLs. Auto-scrape runs when <em>Next</em> is due
+            while this dashboard is open, plus a full scrape every day at{" "}
+            <strong>9:00 AM</strong> (Pakistan time).
           </p>
           <div className="hero-meta">
             <span>{competitors.length} competitors</span>

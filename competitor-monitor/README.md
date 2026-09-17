@@ -41,9 +41,9 @@ npx vercel --prod
 
 Scheduling on Vercel:
 
-- `vercel.json` cron hits `/api/cron` once per day on Hobby (Vercel limit)
-- Dashboard API reads also run any **due** scrapes, so opening/using the app keeps Live/hourly intervals working
-- Upgrade to Pro if you want platform cron every 5 minutes without opening the app
+- Daily full scrape at **09:00 Pakistan time (UTC+5)** via `/api/cron` (`0 4 * * *` UTC)
+- Dashboard `/api/tick` also runs any **due** scrapes while the page is open
+- Hobby plan only allows one cron per day; upgrade to Pro for more frequent platform crons
 
 ## Notes
 

@@ -8,6 +8,7 @@ import {
   updateCompetitor,
 } from "@/lib/db";
 import { scrapeCompetitor } from "@/lib/scrape";
+import { scheduleDueScrapes } from "@/lib/scheduler";
 import { INTERVAL_OPTIONS } from "@/lib/types";
 
 export const maxDuration = 60;
@@ -23,7 +24,10 @@ const createSchema = z.object({
 });
 
 export async function GET() {
-  return Response.json({ competitors: await listCompetitors() });
+  const competitors = await listCompetitors();
+  // Hobby cron is daily-only; due scrapes also run when the dashboard polls.
+  scheduleDueScrapes();
+  return Response.json({ competitors });
 }
 
 export async function POST(request: Request) {

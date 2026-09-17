@@ -1,9 +1,7 @@
-import {
-  listProducts,
-  listRecentScrapeRuns,
-  markAllProductsSeen,
-  markProductSeen,
-} from "@/lib/db";
+import { listProducts, listRecentScrapeRuns, markAllProductsSeen, markProductSeen } from "@/lib/db";
+import { scheduleDueScrapes } from "@/lib/scheduler";
+
+export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
@@ -14,6 +12,8 @@ export async function GET(request: Request) {
     listProducts({ competitorId, newOnly }),
     listRecentScrapeRuns(12),
   ]);
+
+  scheduleDueScrapes();
 
   return Response.json({ products, runs });
 }
