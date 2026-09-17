@@ -9,12 +9,10 @@ export const metadata: Metadata = {
 export default function LoginPage() {
   return (
     <div className="login-shell">
-      <section className="panel login-panel">
+      <section className="login-panel">
         <p className="eyebrow">Competitor Monitor</p>
         <h1>Sign in</h1>
-        <p className="lede">
-          Enter your credentials to open the dashboard.
-        </p>
+        <p className="lede">Enter your credentials to open the dashboard.</p>
         <LoginForm />
       </section>
     </div>

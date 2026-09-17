@@ -7,7 +7,9 @@ import {
   intervalLabel,
   intervalShortLabel,
 } from "@/lib/types";
-import LogoutButton from "@/components/LogoutButton";
+import AppSidebar, { type NavKey } from "@/components/AppSidebar";
+
+type PeriodKey = "7" | "30" | "90" | "custom";
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -25,7 +27,10 @@ function hostFromUrl(url: string): string {
   }
 }
 
-async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+async function apiFetch(
+  input: RequestInfo | URL,
+  init?: RequestInit,
+): Promise<Response> {
   const res = await fetch(input, init);
   if (res.status === 401) {
     window.location.assign("/login");
@@ -54,7 +59,127 @@ async function readJson<T>(res: Response): Promise<T> {
   }
 }
 
+function dayKey(iso: string): string {
+  return iso.slice(0, 10);
+}
+
+function buildTrendPoints(runs: ScrapeRun[], days = 7) {
+  const today = new Date();
+  const keys: string[] = [];
+  for (let i = days - 1; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    keys.push(d.toISOString().slice(0, 10));
+  }
+
+  const found = new Map(keys.map((k) => [k, 0]));
+  const neu = new Map(keys.map((k) => [k, 0]));
+  for (const run of runs) {
+    const k = dayKey(run.startedAt);
+    if (!found.has(k)) continue;
+    found.set(k, (found.get(k) ?? 0) + run.urlsFound);
+    neu.set(k, (neu.get(k) ?? 0) + run.newCount);
+  }
+
+  return keys.map((k) => ({
+    key: k,
+    label: new Date(`${k}T12:00:00`).toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+    }),
+    urls: found.get(k) ?? 0,
+    neu: neu.get(k) ?? 0,
+  }));
+}
+
+function TrendChart({
+  points,
+}: {
+  points: Array<{ label: string; urls: number; neu: number }>;
+}) {
+  const width = 560;
+  const height = 220;
+  const padX = 28;
+  const padY = 18;
+  const maxY = Math.max(8, ...points.flatMap((p) => [p.urls, p.neu]));
+  const stepX =
+    points.length <= 1 ? 0 : (width - padX * 2) / (points.length - 1);
+
+  const toX = (i: number) => padX + i * stepX;
+  const toY = (v: number) =>
+    height - padY - (v / maxY) * (height - padY * 2);
+
+  const area = (values: number[]) => {
+    if (values.length === 0) return "";
+    const line = values
+      .map((v, i) => `${i === 0 ? "M" : "L"} ${toX(i)} ${toY(v)}`)
+      .join(" ");
+    return `${line} L ${toX(values.length - 1)} ${height - padY} L ${toX(0)} ${height - padY} Z`;
+  };
+
+  const line = (values: number[]) =>
+    values
+      .map((v, i) => `${i === 0 ? "M" : "L"} ${toX(i)} ${toY(v)}`)
+      .join(" ");
+
+  const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => Math.round(maxY * t));
+
+  return (
+    <svg className="trend-chart" viewBox={`0 0 ${width} ${height}`} role="img">
+      <defs>
+        <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#6366f1" stopOpacity="0.02" />
+        </linearGradient>
+        <linearGradient id="newFill" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#34d399" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#34d399" stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <g className="trend-grid">
+        {ticks.map((t) => (
+          <line
+            key={t}
+            x1={padX}
+            x2={width - padX}
+            y1={toY(t)}
+            y2={toY(t)}
+          />
+        ))}
+      </g>
+      <path d={area(points.map((p) => p.urls))} fill="url(#trendFill)" />
+      <path d={area(points.map((p) => p.neu))} fill="url(#newFill)" />
+      <path
+        d={line(points.map((p) => p.urls))}
+        fill="none"
+        stroke="#6366f1"
+        strokeWidth="2.5"
+      />
+      <path
+        d={line(points.map((p) => p.neu))}
+        fill="none"
+        stroke="#34d399"
+        strokeWidth="2.5"
+      />
+      {points.map((p, i) => (
+        <text
+          key={p.label}
+          x={toX(i)}
+          y={height - 2}
+          textAnchor="middle"
+          fontSize="10"
+          fill="#94a3b8"
+        >
+          {p.label}
+        </text>
+      ))}
+    </svg>
+  );
+}
+
 export default function Dashboard() {
+  const [nav, setNav] = useState<NavKey>("dashboard");
+  const [period, setPeriod] = useState<PeriodKey>("7");
   const [competitors, setCompetitors] = useState<Competitor[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [runs, setRuns] = useState<ScrapeRun[]>([]);
@@ -70,7 +195,6 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      // Explicitly run due scrapes, then refresh data.
       await apiFetch("/api/tick", { method: "POST" }).catch(() => null);
 
       const [cRes, pRes] = await Promise.all([
@@ -104,7 +228,6 @@ export default function Dashboard() {
       if (!c.enabled || !c.nextScrapeAt) return false;
       return new Date(c.nextScrapeAt).getTime() <= now + 60_000;
     });
-    // Poll faster around / after Next time so auto-scrape actually fires.
     return dueOrSoon ? 15_000 : 30_000;
   }, [competitors]);
 
@@ -113,6 +236,42 @@ export default function Dashboard() {
     const id = window.setInterval(() => void load(), pollMs);
     return () => window.clearInterval(id);
   }, [load, pollMs]);
+
+  const activeCompetitors = useMemo(
+    () => competitors.filter((c) => c.enabled).length,
+    [competitors],
+  );
+
+  const successRuns = useMemo(
+    () => runs.filter((r) => r.status === "success" || r.status === "baseline")
+      .length,
+    [runs],
+  );
+
+  const errorRuns = useMemo(
+    () => runs.filter((r) => r.status === "error").length,
+    [runs],
+  );
+
+  const urlsFoundTotal = useMemo(
+    () => runs.reduce((sum, r) => sum + r.urlsFound, 0),
+    [runs],
+  );
+
+  const newCountTotal = useMemo(
+    () => runs.reduce((sum, r) => sum + r.newCount, 0),
+    [runs],
+  );
+
+  const successRate = useMemo(() => {
+    if (runs.length === 0) return 0;
+    return Math.round((successRuns / runs.length) * 1000) / 10;
+  }, [runs.length, successRuns]);
+
+  const trendPoints = useMemo(
+    () => buildTrendPoints(runs, period === "7" ? 7 : period === "30" ? 14 : 14),
+    [runs, period],
+  );
 
   const lastActivity = useMemo(() => {
     const stamps = competitors
@@ -147,7 +306,7 @@ export default function Dashboard() {
       setName("");
       setSitemapUrl("");
       setIntervalHours(3);
-      // Give baseline scrape a moment, then refresh.
+      setNav("competitors");
       window.setTimeout(() => void load(), 2500);
       await load();
     } catch (err) {
@@ -174,9 +333,10 @@ export default function Dashboard() {
     if (!window.confirm("Remove this competitor and its products?")) return;
     setError(null);
     try {
-      const res = await apiFetch(`/api/competitors?id=${encodeURIComponent(id)}`, {
-        method: "DELETE",
-      });
+      const res = await apiFetch(
+        `/api/competitors?id=${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      );
       const json = await readJson<{ ok?: boolean; error?: string }>(res);
       if (!res.ok) {
         throw new Error(json.error || "Could not delete competitor");
@@ -185,7 +345,9 @@ export default function Dashboard() {
       setProducts((prev) => prev.filter((p) => p.competitorId !== id));
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not delete competitor");
+      setError(
+        err instanceof Error ? err.message : "Could not delete competitor",
+      );
     }
   }
 
@@ -230,227 +392,582 @@ export default function Dashboard() {
     await load();
   }
 
-  return (
-    <div className="page-shell">
-      <header className="hero-band">
-        <div className="hero-inner">
-          <p className="eyebrow">Always-on monitor</p>
-          <h1>Competitor Monitor</h1>
-          <p className="lede">
-            Add store sitemap URLs. Auto-scrape runs when <em>Next</em> is due
-            while this dashboard is open, plus a full scrape every day at{" "}
-            <strong>9:00 AM</strong> (Pakistan time).
-          </p>
-          <div className="hero-meta-row">
-            <div className="hero-meta">
-              <span>{competitors.length} competitors</span>
-              <span>{products.length} new products</span>
-              <span>Last scrape {formatWhen(lastActivity)}</span>
+  const titles: Record<NavKey, { title: string; subtitle: string }> = {
+    dashboard: {
+      title: "Dashboard",
+      subtitle: "Welcome back! Here's your competitor monitoring overview.",
+    },
+    competitors: {
+      title: "Competitors",
+      subtitle: "Add stores, set intervals, and scrape sitemaps.",
+    },
+    products: {
+      title: "New Products",
+      subtitle: "Fresh sitemap URLs detected after baseline scrapes.",
+    },
+    runs: {
+      title: "Scrape Runs",
+      subtitle: "Recent scrape activity across all competitors.",
+    },
+    settings: {
+      title: "Settings",
+      subtitle: "Workspace preferences for this monitor.",
+    },
+  };
+
+  const competitorForm = (
+    <form className="add-form" onSubmit={onAddCompetitor}>
+      <label>
+        Name
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Acme Store"
+          required
+        />
+      </label>
+      <label>
+        Store or sitemap URL
+        <input
+          value={sitemapUrl}
+          onChange={(e) => setSitemapUrl(e.target.value)}
+          placeholder="https://example.com or /sitemap.xml"
+          required
+        />
+      </label>
+      <label>
+        Interval
+        <select
+          value={intervalHours}
+          onChange={(e) =>
+            setIntervalHours(Number(e.target.value) as IntervalHours)
+          }
+        >
+          {INTERVAL_OPTIONS.map((h) => (
+            <option key={h} value={h}>
+              {intervalLabel(h)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <button type="submit" className="btn primary" disabled={saving}>
+        {saving ? "Adding…" : "Add & baseline"}
+      </button>
+    </form>
+  );
+
+  const competitorList = (
+    <div className="competitor-list">
+      {competitors.length === 0 ? (
+        <p className="empty">
+          No competitors yet. Add a store URL to start monitoring.
+        </p>
+      ) : (
+        competitors.map((c) => (
+          <article key={c.id} className="competitor-banner">
+            <div className="competitor-banner-left">
+              <span className="competitor-avatar" aria-hidden>
+                {c.name.trim().charAt(0).toUpperCase() || "C"}
+              </span>
+              <div>
+                <div className="competitor-title-row">
+                  <strong>{c.name}</strong>
+                  <span className="status-pill">ACTIVE</span>
+                </div>
+                <p className="url-line">{hostFromUrl(c.sitemapUrl)}</p>
+                <p className="muted">
+                  Created {formatWhen(c.createdAt)} · Next{" "}
+                  {formatWhen(c.nextScrapeAt)}
+                </p>
+              </div>
             </div>
-            <LogoutButton />
-          </div>
-        </div>
-      </header>
-
-      <main className="layout">
-        <section className="panel">
-          <div className="panel-head">
-            <h2>Add competitor</h2>
-            <button
-              type="button"
-              className="btn ghost"
-              disabled={scraping || competitors.length === 0}
-              onClick={() => void onScrapeNow()}
-            >
-              {scraping ? "Scraping…" : "Scrape all now"}
-            </button>
-          </div>
-
-          <form className="add-form" onSubmit={onAddCompetitor}>
-            <label>
-              Name
-              <input
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Acme Store"
-                required
-              />
-            </label>
-            <label>
-              Store or sitemap URL
-              <input
-                value={sitemapUrl}
-                onChange={(e) => setSitemapUrl(e.target.value)}
-                placeholder="https://example.com or /sitemap.xml"
-                required
-              />
-            </label>
-            <label>
-              Interval
+            <div className="competitor-actions">
               <select
-                value={intervalHours}
+                aria-label={`Interval for ${c.name}`}
+                value={c.intervalHours}
                 onChange={(e) =>
-                  setIntervalHours(Number(e.target.value) as IntervalHours)
+                  void onIntervalChange(
+                    c.id,
+                    Number(e.target.value) as IntervalHours,
+                  )
                 }
               >
                 {INTERVAL_OPTIONS.map((h) => (
                   <option key={h} value={h}>
-                    {intervalLabel(h)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button type="submit" className="btn primary" disabled={saving}>
-              {saving ? "Adding…" : "Add & baseline"}
-            </button>
-          </form>
-
-          {error ? <p className="error">{error}</p> : null}
-
-          <div className="competitor-list">
-            {competitors.length === 0 ? (
-              <p className="empty">
-                No competitors yet. Add a store URL to start monitoring.
-              </p>
-            ) : (
-              competitors.map((c) => (
-                <article key={c.id} className="competitor-row">
-                  <div>
-                    <strong>{c.name}</strong>
-                    <p>{hostFromUrl(c.sitemapUrl)}</p>
-                    <p className="muted">
-                      Next: {formatWhen(c.nextScrapeAt)} · Last:{" "}
-                      {formatWhen(c.lastScrapedAt)}
-                    </p>
-                  </div>
-                  <div className="competitor-actions">
-                    <select
-                      aria-label={`Interval for ${c.name}`}
-                      value={c.intervalHours}
-                      onChange={(e) =>
-                        void onIntervalChange(
-                          c.id,
-                          Number(e.target.value) as IntervalHours,
-                        )
-                      }
-                    >
-                      {INTERVAL_OPTIONS.map((h) => (
-                        <option key={h} value={h}>
-                          {intervalShortLabel(h)}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      className="btn ghost"
-                      onClick={() => void onScrapeNow(c.id)}
-                      disabled={scraping}
-                    >
-                      Scrape
-                    </button>
-                    <button
-                      type="button"
-                      className="btn danger"
-                      onClick={() => void onDelete(c.id)}
-                    >
-                      Remove
-                    </button>
-                  </div>
-                </article>
-              ))
-            )}
-          </div>
-
-          {runs.length > 0 ? (
-            <div className="runs">
-              <h3>Recent runs</h3>
-              <ul>
-                {runs.slice(0, 6).map((run) => (
-                  <li key={run.id}>
-                    <span className={`status status-${run.status}`}>
-                      {run.status}
-                    </span>
-                    <span>
-                      {run.newCount} new / {run.urlsFound} urls ·{" "}
-                      {formatWhen(run.startedAt)}
-                    </span>
-                    {run.error ? (
-                      <span className="muted"> — {run.error}</span>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </section>
-
-        <section className="panel feed">
-          <div className="panel-head">
-            <h2>New product cards</h2>
-            <div className="feed-controls">
-              <select
-                value={filterCompetitorId}
-                onChange={(e) => setFilterCompetitorId(e.target.value)}
-              >
-                <option value="all">All competitors</option>
-                {competitors.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
+                    {intervalShortLabel(h)}
                   </option>
                 ))}
               </select>
               <button
                 type="button"
                 className="btn ghost"
-                disabled={products.length === 0}
-                onClick={() => void markAllSeen()}
+                onClick={() => void onScrapeNow(c.id)}
+                disabled={scraping}
               >
-                Mark all seen
+                Scrape
+              </button>
+              <button
+                type="button"
+                className="btn danger-outline"
+                onClick={() => void onDelete(c.id)}
+              >
+                Remove
               </button>
             </div>
-          </div>
+          </article>
+        ))
+      )}
+    </div>
+  );
 
-          {loading ? (
-            <p className="empty">Loading…</p>
-          ) : products.length === 0 ? (
-            <p className="empty">
-              No new products yet. After the first baseline scrape, newly
-              appearing sitemap URLs will show up here.
-            </p>
-          ) : (
-            <div className="card-grid">
-              {products.map((product) => (
-                <article key={product.id} className="product-card">
-                  <div className="card-top">
-                    <span className="badge">{product.competitorName}</span>
-                    <time dateTime={product.firstSeenAt}>
-                      {formatWhen(product.firstSeenAt)}
-                    </time>
-                  </div>
-                  <h3>{product.title}</h3>
-                  <p className="url-line">{hostFromUrl(product.url)}</p>
-                  <div className="card-actions">
-                    <a
-                      href={product.url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn primary"
-                    >
-                      Open product
-                    </a>
-                    <button
-                      type="button"
-                      className="btn ghost"
-                      onClick={() => void markSeen(product.id)}
-                    >
-                      Mark seen
-                    </button>
-                  </div>
-                </article>
+  const productFeed = (
+    <>
+      <div className="panel-head">
+        <div>
+          <h2 className="section-title">New product cards</h2>
+          <p className="panel-sub">Last scrape {formatWhen(lastActivity)}</p>
+        </div>
+        <div className="feed-controls">
+          <select
+            value={filterCompetitorId}
+            onChange={(e) => setFilterCompetitorId(e.target.value)}
+          >
+            <option value="all">All competitors</option>
+            {competitors.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            className="btn ghost"
+            disabled={products.length === 0}
+            onClick={() => void markAllSeen()}
+          >
+            Mark all seen
+          </button>
+        </div>
+      </div>
+
+      {loading ? (
+        <p className="empty">Loading…</p>
+      ) : products.length === 0 ? (
+        <p className="empty">
+          No new products yet. After the first baseline scrape, newly appearing
+          sitemap URLs will show up here.
+        </p>
+      ) : (
+        <div className="card-grid">
+          {products.map((product) => (
+            <article key={product.id} className="product-card">
+              <div className="card-top">
+                <span className="badge">{product.competitorName}</span>
+                <time dateTime={product.firstSeenAt}>
+                  {formatWhen(product.firstSeenAt)}
+                </time>
+              </div>
+              <h3>{product.title}</h3>
+              <p className="url-line">{hostFromUrl(product.url)}</p>
+              <div className="card-actions">
+                <a
+                  href={product.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn primary"
+                >
+                  Open product
+                </a>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  onClick={() => void markSeen(product.id)}
+                >
+                  Mark seen
+                </button>
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </>
+  );
+
+  const runsList = (
+    <div className="runs" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
+      {runs.length === 0 ? (
+        <p className="empty">No scrape runs yet.</p>
+      ) : (
+        <ul>
+          {runs.slice(0, 20).map((run) => (
+            <li key={run.id}>
+              <span className={`status status-${run.status}`}>{run.status}</span>
+              <span>
+                {run.newCount} new / {run.urlsFound} urls ·{" "}
+                {formatWhen(run.startedAt)}
+              </span>
+              {run.error ? (
+                <span className="muted"> — {run.error}</span>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="app-shell">
+      <AppSidebar active={nav} onNavigate={setNav} />
+
+      <main className="main-pane">
+        <div className="page-header">
+          <div>
+            <h1>{titles[nav].title}</h1>
+            <p>{titles[nav].subtitle}</p>
+          </div>
+          <button
+            type="button"
+            className="btn primary"
+            onClick={() => setNav("competitors")}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+              <path
+                d="M3.5 11.5 20 4l-4.2 16.2-3.6-6.4L3.5 11.5Z"
+                stroke="currentColor"
+                strokeWidth="1.7"
+                strokeLinejoin="round"
+              />
+            </svg>
+            New Competitor
+          </button>
+        </div>
+
+        {nav === "dashboard" ? (
+          <>
+            <div className="period-tabs" role="tablist" aria-label="Period">
+              {(
+                [
+                  ["7", "Last 7 days"],
+                  ["30", "Last 30 days"],
+                  ["90", "Last 90 days"],
+                  ["custom", "Custom"],
+                ] as const
+              ).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`period-tab${period === key ? " active" : ""}`}
+                  onClick={() => setPeriod(key)}
+                >
+                  {label}
+                </button>
               ))}
             </div>
-          )}
-        </section>
+
+            <section className="stat-grid">
+              <article className="stat-card">
+                <div className="stat-icon purple" aria-hidden>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 19h16M7 16V8m5 8V5m5 11v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <p className="stat-label">Total Competitors</p>
+                <p className="stat-value">{competitors.length}</p>
+                <span className="stat-trend flat">Tracked stores</span>
+              </article>
+              <article className="stat-card">
+                <div className="stat-icon green" aria-hidden>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="m5 12 5 5L20 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <p className="stat-label">Active Competitors</p>
+                <p className="stat-value">{activeCompetitors}</p>
+                <span className="stat-trend up">Enabled monitors</span>
+              </article>
+              <article className="stat-card">
+                <div className="stat-icon blue" aria-hidden>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 7h16v12H4V7Zm2-3h12l2 3H4l2-3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <p className="stat-label">New Products</p>
+                <p className="stat-value">{products.length}</p>
+                <span className="stat-trend flat">Unseen cards</span>
+              </article>
+              <article className="stat-card">
+                <div className="stat-icon orange" aria-hidden>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M4 12a8 8 0 1 0 2.3-5.7M4 4v4h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </div>
+                <p className="stat-label">Scrape Success</p>
+                <p className="stat-value">{successRate}%</p>
+                <span className={`stat-trend ${errorRuns > 0 ? "down" : "up"}`}>
+                  {successRuns}/{runs.length || 0} recent runs
+                </span>
+              </article>
+              <article className="stat-card">
+                <div className="stat-icon indigo" aria-hidden>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <p className="stat-label">URLs Found</p>
+                <p className="stat-value">
+                  {urlsFoundTotal.toLocaleString()}
+                </p>
+                <span className="stat-trend flat">
+                  {newCountTotal} newly detected
+                </span>
+              </article>
+            </section>
+
+            <section className="charts-row">
+              <article className="panel-card">
+                <h2>Success vs Errors</h2>
+                <p className="panel-sub">Scrape delivery breakdown</p>
+                <div className="donut-wrap">
+                  <div
+                    className="donut"
+                    style={{
+                      background: `conic-gradient(#6366f1 0 ${successRate}%, #e2e8f0 ${successRate}% 100%)`,
+                    }}
+                  >
+                    <div className="donut-hole">
+                      <strong>{successRate}%</strong>
+                      <span>Success Rate</span>
+                    </div>
+                  </div>
+                </div>
+                <div className="chart-legend">
+                  <span>
+                    <i className="dot purple" /> Success ({successRate}%)
+                  </span>
+                  <span>
+                    <i className="dot gray" /> Errors (
+                    {Math.max(0, Math.round((100 - successRate) * 10) / 10)}%)
+                  </span>
+                </div>
+              </article>
+
+              <article className="panel-card">
+                <div className="panel-head">
+                  <div>
+                    <h2>Discovery Trend</h2>
+                    <p className="panel-sub">URLs found vs newly detected</p>
+                  </div>
+                  <div className="chart-legend" style={{ marginTop: 0 }}>
+                    <span>
+                      <i className="dot purple" /> Found
+                    </span>
+                    <span>
+                      <i className="dot green" /> New
+                    </span>
+                  </div>
+                </div>
+                <TrendChart points={trendPoints} />
+              </article>
+            </section>
+
+            <section className="panel-card funnel-panel">
+              <p className="eyebrow-section">Conversion Funnel</p>
+              <h2>Discovery funnel</h2>
+              <p className="panel-sub">From scrape volume to new product cards</p>
+              <div className="funnel">
+                <div className="funnel-step s1">
+                  <span>URLs Found</span>
+                  <strong>{urlsFoundTotal.toLocaleString()}</strong>
+                </div>
+                <div className="funnel-step s2">
+                  <span>Successful Runs</span>
+                  <strong>{successRuns}</strong>
+                </div>
+                <div className="funnel-step s3">
+                  <span>Newly Detected</span>
+                  <strong>{newCountTotal}</strong>
+                </div>
+                <div className="funnel-step s4">
+                  <span>Unseen Cards</span>
+                  <strong>{products.length}</strong>
+                </div>
+              </div>
+            </section>
+
+            <div className="content-grid">
+              <section className="panel-card">
+                <div className="panel-head">
+                  <h2 className="section-title">Competitors</h2>
+                  <button
+                    type="button"
+                    className="btn ghost"
+                    disabled={scraping || competitors.length === 0}
+                    onClick={() => void onScrapeNow()}
+                  >
+                    {scraping ? "Scraping…" : "Scrape all"}
+                  </button>
+                </div>
+                {error ? <p className="error">{error}</p> : null}
+                {competitorList}
+              </section>
+              <section className="panel-card">{productFeed}</section>
+            </div>
+          </>
+        ) : null}
+
+        {nav === "competitors" ? (
+          <div className="stack">
+            <section className="panel-card">
+              <div className="panel-head">
+                <div>
+                  <h2 className="section-title">Add competitor</h2>
+                  <p className="panel-sub">Baselines on first scrape · sitemap only</p>
+                </div>
+                <button
+                  type="button"
+                  className="btn ghost"
+                  disabled={scraping || competitors.length === 0}
+                  onClick={() => void onScrapeNow()}
+                >
+                  {scraping ? "Scraping…" : "Scrape all now"}
+                </button>
+              </div>
+              {competitorForm}
+              {error ? <p className="error">{error}</p> : null}
+            </section>
+
+            {competitors.length > 0 ? (
+              <>
+                <section className="panel-card">
+                  <div className="panel-head">
+                    <div>
+                      <h2 className="section-title analytics-title">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+                          <path d="M4 19h16M7 16V8m5 8V5m5 11v-6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
+                        Monitor Analytics
+                      </h2>
+                      <p className="panel-sub">
+                        {competitors.length} stores · last scrape{" "}
+                        {formatWhen(lastActivity)}
+                      </p>
+                    </div>
+                    <span className="period-chip">Last {period === "custom" ? "7" : period} days</span>
+                  </div>
+                  <div className="stat-grid four">
+                    <article className="stat-card compact">
+                      <div className="stat-icon blue" aria-hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M4 7h16v12H4V7Zm2-3h12l2 3H4l2-3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <p className="stat-label">URLs Found</p>
+                      <p className="stat-value">{urlsFoundTotal.toLocaleString()}</p>
+                    </article>
+                    <article className="stat-card compact">
+                      <div className="stat-icon green" aria-hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z" stroke="currentColor" strokeWidth="1.8" />
+                          <circle cx="12" cy="12" r="2.5" stroke="currentColor" strokeWidth="1.8" />
+                        </svg>
+                      </div>
+                      <p className="stat-label">Success Rate</p>
+                      <p className="stat-value">{successRate}%</p>
+                    </article>
+                    <article className="stat-card compact">
+                      <div className="stat-icon purple" aria-hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M8 10h8M8 14h5M6 4h12l1 4H5l1-4Zm0 4h12v12H6V8Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                        </svg>
+                      </div>
+                      <p className="stat-label">Newly Detected</p>
+                      <p className="stat-value">{newCountTotal}</p>
+                    </article>
+                    <article className="stat-card compact">
+                      <div className="stat-icon orange" aria-hidden>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                          <path d="M12 9v4m0 4h.01M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                        </svg>
+                      </div>
+                      <p className="stat-label">Error Runs</p>
+                      <p className="stat-value">{errorRuns}</p>
+                    </article>
+                  </div>
+                </section>
+
+                <section className="panel-card funnel-panel">
+                  <p className="eyebrow-section">Conversion Funnel</p>
+                  <div className="funnel">
+                    <div className="funnel-step s1">
+                      <span>Found</span>
+                      <strong>{urlsFoundTotal.toLocaleString()}</strong>
+                    </div>
+                    <div className="funnel-step s2">
+                      <span>Success</span>
+                      <strong>{successRuns}</strong>
+                    </div>
+                    <div className="funnel-step s3">
+                      <span>Detected</span>
+                      <strong>{newCountTotal}</strong>
+                    </div>
+                    <div className="funnel-step s4">
+                      <span>Unseen</span>
+                      <strong>{products.length}</strong>
+                    </div>
+                  </div>
+                </section>
+              </>
+            ) : null}
+
+            <section className="panel-card">
+              <h2 className="section-title">Monitored stores</h2>
+              <p className="panel-sub">
+                {competitors.length} competitors · pause/remove anytime
+              </p>
+              {competitorList}
+            </section>
+          </div>
+        ) : null}
+
+        {nav === "products" ? (
+          <section className="panel-card">{productFeed}</section>
+        ) : null}
+
+        {nav === "runs" ? (
+          <section className="panel-card">
+            <h2 className="section-title">Recent runs</h2>
+            <p className="panel-sub">Latest scrape outcomes</p>
+            {runsList}
+          </section>
+        ) : null}
+
+        {nav === "settings" ? (
+          <section className="panel-card">
+            <h2 className="section-title">Workspace</h2>
+            <p className="panel-sub">
+              Auto-scrape runs while this dashboard is open. A full scrape also
+              runs daily at 9:00 AM Pakistan time via cron.
+            </p>
+            <div className="competitor-list">
+              <article className="competitor-row">
+                <div>
+                  <strong>Daily cron</strong>
+                  <p className="muted">09:00 Asia/Karachi via /api/cron</p>
+                </div>
+                <span className="status-pill">ACTIVE</span>
+              </article>
+              <article className="competitor-row">
+                <div>
+                  <strong>Session auth</strong>
+                  <p className="muted">
+                    Sign out from the sidebar profile row when finished.
+                  </p>
+                </div>
+              </article>
+            </div>
+          </section>
+        ) : null}
       </main>
     </div>
   );
