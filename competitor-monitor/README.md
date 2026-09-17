@@ -17,10 +17,20 @@ Always-on dashboard that watches competitor **sitemaps** and shows **newly appea
 ```bash
 cd competitor-monitor
 npm install
+```
+
+Copy `.env.example` to `.env.local` and set:
+
+- `AUTH_USERNAME` / `AUTH_PASSWORD` — dashboard login
+- `SESSION_SECRET` — at least 32 characters (`openssl rand -base64 32`)
+
+Then:
+
+```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open [http://localhost:3000](http://localhost:3000). Unauthenticated visits go to `/login`. The dashboard, scrape APIs, and product APIs require a valid session. `/api/cron` still uses `CRON_SECRET` so Vercel Cron is unchanged.
 
 Local data is stored in `data/store.json` (no Redis/Blob required).
 
@@ -34,6 +44,8 @@ Vercel is serverless, so the app needs **durable storage**:
    - sets `BLOB_READ_WRITE_TOKEN`
 
 Optional: set `CRON_SECRET` and Vercel will send it as `Authorization: Bearer …` to `/api/cron`.
+
+Also set `AUTH_USERNAME`, `AUTH_PASSWORD`, and `SESSION_SECRET` on the Vercel project so production login works.
 
 ```bash
 npx vercel --prod

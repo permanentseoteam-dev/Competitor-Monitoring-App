@@ -10,6 +10,7 @@ import {
 import { scrapeCompetitor } from "@/lib/scrape";
 import { scheduleDueScrapes } from "@/lib/scheduler";
 import { INTERVAL_OPTIONS } from "@/lib/types";
+import { requireApiSession } from "@/lib/dal";
 
 export const maxDuration = 60;
 
@@ -24,6 +25,8 @@ const createSchema = z.object({
 });
 
 export async function GET() {
+  const denied = await requireApiSession();
+  if (denied) return denied;
   const competitors = await listCompetitors();
   // Hobby cron is daily-only; due scrapes also run when the dashboard polls.
   scheduleDueScrapes();
@@ -31,6 +34,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const denied = await requireApiSession();
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();
@@ -80,6 +85,8 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const denied = await requireApiSession();
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();
@@ -120,6 +127,8 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
+  const denied = await requireApiSession();
+  if (denied) return denied;
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
   if (!id) {

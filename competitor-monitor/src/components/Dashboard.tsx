@@ -7,6 +7,7 @@ import {
   intervalLabel,
   intervalShortLabel,
 } from "@/lib/types";
+import LogoutButton from "@/components/LogoutButton";
 
 function formatWhen(iso: string | null): string {
   if (!iso) return "—";
@@ -22,6 +23,15 @@ function hostFromUrl(url: string): string {
   } catch {
     return url;
   }
+}
+
+async function apiFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const res = await fetch(input, init);
+  if (res.status === 401) {
+    window.location.assign("/login");
+    throw new Error("Unauthorized");
+  }
+  return res;
 }
 
 async function readJson<T>(res: Response): Promise<T> {
@@ -61,11 +71,11 @@ export default function Dashboard() {
     setError(null);
     try {
       // Explicitly run due scrapes, then refresh data.
-      await fetch("/api/tick", { method: "POST" }).catch(() => null);
+      await apiFetch("/api/tick", { method: "POST" }).catch(() => null);
 
       const [cRes, pRes] = await Promise.all([
-        fetch("/api/competitors"),
-        fetch(
+        apiFetch("/api/competitors"),
+        apiFetch(
           `/api/products?newOnly=1${
             filterCompetitorId !== "all"
               ? `&competitorId=${filterCompetitorId}`
@@ -118,7 +128,7 @@ export default function Dashboard() {
     setSaving(true);
     setError(null);
     try {
-      const res = await fetch("/api/competitors", {
+      const res = await apiFetch("/api/competitors", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, sitemapUrl, intervalHours }),
@@ -148,7 +158,7 @@ export default function Dashboard() {
   }
 
   async function onIntervalChange(id: string, value: IntervalHours) {
-    const res = await fetch("/api/competitors", {
+    const res = await apiFetch("/api/competitors", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id, intervalHours: value }),
@@ -164,7 +174,7 @@ export default function Dashboard() {
     if (!window.confirm("Remove this competitor and its products?")) return;
     setError(null);
     try {
-      const res = await fetch(`/api/competitors?id=${encodeURIComponent(id)}`, {
+      const res = await apiFetch(`/api/competitors?id=${encodeURIComponent(id)}`, {
         method: "DELETE",
       });
       const json = await readJson<{ ok?: boolean; error?: string }>(res);
@@ -183,7 +193,7 @@ export default function Dashboard() {
     setScraping(true);
     setError(null);
     try {
-      const res = await fetch("/api/scrape", {
+      const res = await apiFetch("/api/scrape", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(competitorId ? { competitorId } : {}),
@@ -199,7 +209,7 @@ export default function Dashboard() {
   }
 
   async function markSeen(id: string) {
-    await fetch("/api/products", {
+    await apiFetch("/api/products", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
@@ -208,7 +218,7 @@ export default function Dashboard() {
   }
 
   async function markAllSeen() {
-    await fetch("/api/products", {
+    await apiFetch("/api/products", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -231,10 +241,13 @@ export default function Dashboard() {
             while this dashboard is open, plus a full scrape every day at{" "}
             <strong>9:00 AM</strong> (Pakistan time).
           </p>
-          <div className="hero-meta">
-            <span>{competitors.length} competitors</span>
-            <span>{products.length} new products</span>
-            <span>Last scrape {formatWhen(lastActivity)}</span>
+          <div className="hero-meta-row">
+            <div className="hero-meta">
+              <span>{competitors.length} competitors</span>
+              <span>{products.length} new products</span>
+              <span>Last scrape {formatWhen(lastActivity)}</span>
+            </div>
+            <LogoutButton />
           </div>
         </div>
       </header>

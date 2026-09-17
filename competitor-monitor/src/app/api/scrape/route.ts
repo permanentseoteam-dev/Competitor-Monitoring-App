@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { requireApiSession } from "@/lib/dal";
 import { getCompetitor, listCompetitors } from "@/lib/db";
 import { scrapeCompetitor } from "@/lib/scrape";
 
@@ -7,6 +8,8 @@ const schema = z.object({
 });
 
 export async function POST(request: Request) {
+  const denied = await requireApiSession();
+  if (denied) return denied;
   let body: unknown = {};
   try {
     body = await request.json();

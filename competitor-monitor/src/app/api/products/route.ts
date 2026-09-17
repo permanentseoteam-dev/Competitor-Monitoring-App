@@ -1,9 +1,12 @@
 import { listProducts, listRecentScrapeRuns, markAllProductsSeen, markProductSeen } from "@/lib/db";
+import { requireApiSession } from "@/lib/dal";
 import { scheduleDueScrapes } from "@/lib/scheduler";
 
 export const maxDuration = 60;
 
 export async function GET(request: Request) {
+  const denied = await requireApiSession();
+  if (denied) return denied;
   const { searchParams } = new URL(request.url);
   const competitorId = searchParams.get("competitorId") ?? undefined;
   const newOnly = searchParams.get("newOnly") !== "0";
@@ -19,6 +22,8 @@ export async function GET(request: Request) {
 }
 
 export async function PATCH(request: Request) {
+  const denied = await requireApiSession();
+  if (denied) return denied;
   let body: unknown;
   try {
     body = await request.json();
