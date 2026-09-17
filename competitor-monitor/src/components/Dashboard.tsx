@@ -8,6 +8,7 @@ import {
   intervalShortLabel,
 } from "@/lib/types";
 import AppSidebar, { type NavKey } from "@/components/AppSidebar";
+import { pricingBanner } from "@/lib/pricingBanner";
 
 type PeriodKey = "7" | "30" | "90" | "custom";
 
@@ -191,6 +192,35 @@ export default function Dashboard() {
   const [name, setName] = useState("");
   const [sitemapUrl, setSitemapUrl] = useState("");
   const [intervalHours, setIntervalHours] = useState<IntervalHours>(3);
+  const [bannerDismissed, setBannerDismissed] = useState(false);
+
+  useEffect(() => {
+    if (!pricingBanner.enabled || pricingBanner.dismissible === false) return;
+    const key = pricingBanner.storageKey ?? "cm-pricing-banner-dismissed";
+    try {
+      if (window.localStorage.getItem(key) === "1") {
+        setBannerDismissed(true);
+      }
+    } catch {
+      /* ignore storage errors */
+    }
+  }, []);
+
+  const showPricingBanner =
+    nav === "dashboard" &&
+    pricingBanner.enabled &&
+    !bannerDismissed;
+
+  function dismissPricingBanner() {
+    setBannerDismissed(true);
+    if (pricingBanner.dismissible === false) return;
+    const key = pricingBanner.storageKey ?? "cm-pricing-banner-dismissed";
+    try {
+      window.localStorage.setItem(key, "1");
+    } catch {
+      /* ignore storage errors */
+    }
+  }
 
   const load = useCallback(async () => {
     setError(null);
@@ -642,6 +672,47 @@ export default function Dashboard() {
             New Competitor
           </button>
         </div>
+
+        {showPricingBanner ? (
+          <aside className="pricing-banner" aria-label="Pricing offer">
+            <div className="pricing-banner-copy">
+              {pricingBanner.badge ? (
+                <span className="pricing-banner-badge">
+                  {pricingBanner.badge}
+                </span>
+              ) : null}
+              <p className="pricing-banner-title">{pricingBanner.title}</p>
+              <p className="pricing-banner-subtitle">
+                {pricingBanner.subtitle}
+              </p>
+            </div>
+            <div className="pricing-banner-actions">
+              <span className="pricing-banner-price">
+                {pricingBanner.priceLabel}
+              </span>
+              <a href={pricingBanner.ctaHref} className="btn primary">
+                {pricingBanner.ctaText}
+              </a>
+              {pricingBanner.dismissible !== false ? (
+                <button
+                  type="button"
+                  className="pricing-banner-dismiss"
+                  aria-label="Dismiss pricing banner"
+                  onClick={dismissPricingBanner}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                    <path
+                      d="M6 6l12 12M18 6 6 18"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </button>
+              ) : null}
+            </div>
+          </aside>
+        ) : null}
 
         {nav === "dashboard" ? (
           <>
