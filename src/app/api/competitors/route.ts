@@ -4,6 +4,7 @@ import {
   createCompetitor,
   deleteCompetitor,
   getCompetitor,
+  getSettings,
   listCompetitors,
   updateCompetitor,
 } from "@/lib/db";
@@ -27,7 +28,8 @@ export async function GET() {
   const denied = await requireApiSession();
   if (denied) return denied;
   const competitors = await listCompetitors();
-  return Response.json({ competitors });
+  const settings = await getSettings();
+  return Response.json({ competitors, settings });
 }
 
 export async function POST(request: Request) {

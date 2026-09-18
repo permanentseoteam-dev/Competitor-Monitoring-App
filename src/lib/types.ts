@@ -1,7 +1,12 @@
-export type IntervalHours = 0 | 1 | 2 | 3 | 4 | 5;
+export type IntervalHours = 5 | 8 | 12 | 16 | 18 | 20;
 
-/** 0 = Live mode (scrape every few minutes). */
-export const LIVE_INTERVAL_MINUTES = 5;
+export type MonitorSettings = {
+  dailyCronEnabled: boolean;
+};
+
+export const DEFAULT_SETTINGS: MonitorSettings = {
+  dailyCronEnabled: true,
+};
 
 export interface Competitor {
   id: string;
@@ -35,19 +40,25 @@ export interface ScrapeRun {
   error: string | null;
 }
 
-export const INTERVAL_OPTIONS: IntervalHours[] = [0, 1, 2, 3, 4, 5];
+export const INTERVAL_OPTIONS: IntervalHours[] = [5, 8, 12, 16, 18, 20];
+
+export function isIntervalHours(value: number): value is IntervalHours {
+  return (INTERVAL_OPTIONS as number[]).includes(value);
+}
+
+/** Map legacy live/1–4h values to the new 5h minimum. */
+export function normalizeIntervalHours(value: number): IntervalHours {
+  return isIntervalHours(value) ? value : 5;
+}
 
 export function intervalLabel(hours: IntervalHours): string {
-  if (hours === 0) return `Live (every ${LIVE_INTERVAL_MINUTES} min)`;
-  return hours === 1 ? "Every 1 hour" : `Every ${hours} hours`;
+  return `Every ${hours} hours`;
 }
 
 export function intervalShortLabel(hours: IntervalHours): string {
-  if (hours === 0) return "Live";
   return `${hours}h`;
 }
 
 export function msUntilNextScrape(hours: IntervalHours): number {
-  if (hours === 0) return LIVE_INTERVAL_MINUTES * 60 * 1000;
-  return hours * 60 * 60 * 1000;
+  return normalizeIntervalHours(hours) * 60 * 60 * 1000;
 }

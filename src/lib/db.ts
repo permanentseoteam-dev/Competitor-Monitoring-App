@@ -3,13 +3,24 @@ import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Redis } from "@upstash/redis";
 import { BlobNotFoundError, get, put } from "@vercel/blob";
-import type { Competitor, IntervalHours, Product, ScrapeRun } from "./types";
-import { msUntilNextScrape } from "./types";
+import type {
+  Competitor,
+  IntervalHours,
+  MonitorSettings,
+  Product,
+  ScrapeRun,
+} from "./types";
+import {
+  DEFAULT_SETTINGS,
+  msUntilNextScrape,
+  normalizeIntervalHours,
+} from "./types";
 
 type Store = {
   competitors: Competitor[];
   products: Array<Omit<Product, "competitorName">>;
   scrapeRuns: ScrapeRun[];
+  settings: MonitorSettings;
 };
 
 type ProductRow = Omit<Product, "competitorName">;
@@ -18,7 +29,25 @@ const EMPTY_STORE: Store = {
   competitors: [],
   products: [],
   scrapeRuns: [],
+  settings: { ...DEFAULT_SETTINGS },
 };
+
+function normalizeSettings(
+  settings?: Partial<MonitorSettings> | null,
+): MonitorSettings {
+  return {
+    dailyCronEnabled: settings?.dailyCronEnabled !== false,
+  };
+}
+
+function normalizeStore(store: Store): Store {
+  return {
+    competitors: store.competitors ?? [],
+    products: store.products ?? [],
+    scrapeRuns: store.scrapeRuns ?? [],
+    settings: normalizeSettings(store.settings),
+  };
+}
 
 const DATA_DIR = path.join(process.cwd(), "data");
 const STORE_PATH = path.join(DATA_DIR, "store.json");
@@ -62,7 +91,7 @@ async function readStoreUnlocked(): Promise<Store> {
 
   if (hasRedis()) {
     const data = await getRedis().get<Store>(REDIS_KEY);
-    return data ?? structuredClone(EMPTY_STORE);
+    return normalizeStore(data ?? structuredClone(EMPTY_STORE));
   }
 
   if (hasBlob()) {
@@ -76,7 +105,7 @@ async function readStoreUnlocked(): Promise<Store> {
       }
       const text = await new Response(result.stream).text();
       if (!text.trim()) return structuredClone(EMPTY_STORE);
-      return JSON.parse(text) as Store;
+      return normalizeStore(JSON.parse(text) as Store);
     } catch (error) {
       if (error instanceof BlobNotFoundError) {
         return structuredClone(EMPTY_STORE);
@@ -88,7 +117,7 @@ async function readStoreUnlocked(): Promise<Store> {
   try {
     const raw = await fs.readFile(STORE_PATH, "utf8");
     if (!raw.trim()) return structuredClone(EMPTY_STORE);
-    return JSON.parse(raw) as Store;
+    return normalizeStore(JSON.parse(raw) as Store);
   } catch {
     return structuredClone(EMPTY_STORE);
   }
@@ -199,6 +228,7 @@ function mergeMutation(before: Store, local: Store, remote: Store): Store {
     ),
     products,
     scrapeRuns,
+    settings: normalizeSettings(local.settings ?? remote.settings),
   };
 }
 
@@ -228,16 +258,24 @@ function withCompetitorName(store: Store, product: ProductRow): Product {
   };
 }
 
+function withNormalizedInterval(competitor: Competitor): Competitor {
+  return {
+    ...competitor,
+    intervalHours: normalizeIntervalHours(competitor.intervalHours),
+  };
+}
+
 export async function listCompetitors(): Promise<Competitor[]> {
   const store = await readStore();
-  return [...store.competitors].sort((a, b) =>
-    b.createdAt.localeCompare(a.createdAt),
-  );
+  return [...store.competitors]
+    .map(withNormalizedInterval)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 
 export async function getCompetitor(id: string): Promise<Competitor | null> {
   const store = await readStore();
-  return store.competitors.find((c) => c.id === id) ?? null;
+  const competitor = store.competitors.find((c) => c.id === id) ?? null;
+  return competitor ? withNormalizedInterval(competitor) : null;
 }
 
 export async function createCompetitor(input: {
@@ -251,7 +289,7 @@ export async function createCompetitor(input: {
       id: randomUUID(),
       name: input.name,
       sitemapUrl: input.sitemapUrl,
-      intervalHours: input.intervalHours,
+      intervalHours: normalizeIntervalHours(input.intervalHours),
       enabled: true,
       lastScrapedAt: null,
       nextScrapeAt: createdAt,
@@ -278,10 +316,10 @@ export async function updateCompetitor(
     if (index < 0) return null;
 
     const existing = store.competitors[index];
-    const intervalChanged =
-      patch.intervalHours !== undefined &&
-      patch.intervalHours !== existing.intervalHours;
-    const intervalHours = patch.intervalHours ?? existing.intervalHours;
+    const intervalHours = normalizeIntervalHours(
+      patch.intervalHours ?? existing.intervalHours,
+    );
+    const intervalChanged = intervalHours !== existing.intervalHours;
 
     let nextScrapeAt =
       patch.nextScrapeAt === undefined
@@ -311,7 +349,7 @@ export async function updateCompetitor(
     };
 
     store.competitors[index] = updated;
-    return updated;
+    return withNormalizedInterval(updated);
   });
 }
 
@@ -334,6 +372,7 @@ export async function listDueCompetitors(
       (c) =>
         c.enabled && (!c.nextScrapeAt || c.nextScrapeAt <= nowIso),
     )
+    .map(withNormalizedInterval)
     .sort((a, b) =>
       (a.nextScrapeAt ?? "").localeCompare(b.nextScrapeAt ?? ""),
     );
@@ -477,12 +516,31 @@ export async function scheduleNextScrape(
   intervalHours: IntervalHours,
   from = new Date(),
 ): Promise<string> {
+  const interval = normalizeIntervalHours(intervalHours);
   const nextIso = new Date(
-    from.getTime() + msUntilNextScrape(intervalHours),
+    from.getTime() + msUntilNextScrape(interval),
   ).toISOString();
   await updateCompetitor(competitorId, {
     lastScrapedAt: from.toISOString(),
     nextScrapeAt: nextIso,
+    intervalHours: interval,
   });
   return nextIso;
+}
+
+export async function getSettings(): Promise<MonitorSettings> {
+  const store = await readStore();
+  return normalizeSettings(store.settings);
+}
+
+export async function updateSettings(
+  patch: Partial<MonitorSettings>,
+): Promise<MonitorSettings> {
+  return mutateStore((store) => {
+    store.settings = normalizeSettings({
+      ...store.settings,
+      ...patch,
+    });
+    return store.settings;
+  });
 }

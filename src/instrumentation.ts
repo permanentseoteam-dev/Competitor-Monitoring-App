@@ -1,4 +1,3 @@
-// No long-lived process on Vercel. Scheduling uses:
-// 1) /api/cron (Vercel Cron)
-// 2) due-scrape checks on dashboard API reads
+// Scheduling uses Vercel Cron at /api/cron only.
+// Dashboard reads never start scrapes; use Scrape now or the daily job.
 export async function register() {}

@@ -245,7 +245,7 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [sitemapUrl, setSitemapUrl] = useState("");
-  const [intervalHours, setIntervalHours] = useState<IntervalHours>(3);
+  const [intervalHours, setIntervalHours] = useState<IntervalHours>(5);
   const [bannerDismissed, setBannerDismissed] = useState(false);
 
   useEffect(() => {
@@ -376,7 +376,7 @@ export default function Dashboard() {
       });
       setName("");
       setSitemapUrl("");
-      setIntervalHours(3);
+      setIntervalHours(5);
       setNav("competitors");
       await load();
     } catch (err) {

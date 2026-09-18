@@ -1,10 +1,13 @@
-import { after } from "next/server";
 import {
+  getSettings,
   listCompetitors,
   listDueCompetitors,
   updateCompetitor,
 } from "@/lib/db";
 import { scrapeCompetitor } from "@/lib/scrape";
+
+/** Skip the daily job for stores scraped this recently (avoids double work). */
+const RECENT_SCRAPE_MS = 12 * 60 * 60 * 1000;
 
 declare global {
   // eslint-disable-next-line no-var
@@ -26,7 +29,7 @@ async function scrapeClaimed(
   if (lock.has(competitorId)) return false;
   lock.add(competitorId);
   try {
-    // Soft claim (~10 min) so another tick won't pick the same store.
+    // Soft claim so a overlapping invocation won't pick the same store.
     await updateCompetitor(competitorId, {
       nextScrapeAt: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
     });
@@ -41,7 +44,7 @@ async function scrapeClaimed(
 }
 
 /**
- * Scrape any competitor whose nextScrapeAt is due.
+ * Scrape competitors whose nextScrapeAt is due. Used by explicit POST /api/tick.
  */
 export async function runDueScrapes(): Promise<number> {
   const due = await listDueCompetitors();
@@ -53,21 +56,25 @@ export async function runDueScrapes(): Promise<number> {
 }
 
 /**
- * Daily 9am job: scrape every enabled competitor, whether due or not.
+ * Daily 9am job: scrape enabled stores that are due or have gone stale.
+ * Skips stores scraped within the last 12 hours.
  */
 export async function runDailyMorningScrapes(): Promise<number> {
+  if (!(await getSettings()).dailyCronEnabled) return 0;
+
   const competitors = (await listCompetitors()).filter((c) => c.enabled);
+  const now = Date.now();
   let ran = 0;
   for (const competitor of competitors) {
+    const last = competitor.lastScrapedAt
+      ? new Date(competitor.lastScrapedAt).getTime()
+      : 0;
+    const due =
+      !competitor.nextScrapeAt ||
+      new Date(competitor.nextScrapeAt).getTime() <= now;
+    const stale = now - last >= RECENT_SCRAPE_MS;
+    if (!due && !stale) continue;
     if (await scrapeClaimed(competitor.id, competitor.name)) ran += 1;
   }
   return ran;
-}
-
-export function scheduleDueScrapes(): void {
-  after(() => {
-    void runDueScrapes().catch((error) => {
-      console.error("[scheduler] due scrapes failed:", error);
-    });
-  });
 }

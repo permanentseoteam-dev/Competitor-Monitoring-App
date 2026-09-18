@@ -1,3 +1,4 @@
+import { getSettings } from "@/lib/db";
 import { runDailyMorningScrapes } from "@/lib/scheduler";
 
 export const maxDuration = 300;
@@ -14,11 +15,24 @@ export async function GET(request: Request) {
     return Response.json({ error: "Unauthorized" }, { status: 401 });
   }
 
+  const settings = await getSettings();
+  if (!settings.dailyCronEnabled) {
+    return Response.json({
+      ok: true,
+      ran: 0,
+      skipped: true,
+      reason: "disabled",
+      mode: "daily-9am",
+      ranAt: new Date().toISOString(),
+    });
+  }
+
   // Vercel cron: daily at 09:00 Asia/Karachi (UTC+5) => 04:00 UTC
   const ran = await runDailyMorningScrapes();
   return Response.json({
     ok: true,
     ran,
+    skipped: false,
     mode: "daily-9am",
     ranAt: new Date().toISOString(),
   });

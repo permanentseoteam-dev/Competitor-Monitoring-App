@@ -33,7 +33,7 @@ const PRODUCT_HINTS = [
   "/goods/",
 ];
 
-const MAX_SITEMAPS = 25;
+const MAX_SITEMAPS = 12;
 
 function asArray<T>(value: T | T[] | undefined | null): T[] {
   if (!value) return [];
