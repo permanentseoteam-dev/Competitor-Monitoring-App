@@ -168,13 +168,67 @@ function TrendChart({
           x={toX(i)}
           y={height - 2}
           textAnchor="middle"
-          fontSize="10"
-          fill="#94a3b8"
+          fontSize="12"
+          fill="#475569"
         >
           {p.label}
         </text>
       ))}
     </svg>
+  );
+}
+
+function EmptyState({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="empty-state">
+      <div className="empty-state-icon" aria-hidden>
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <rect
+            x="4"
+            y="6"
+            width="16"
+            height="12"
+            rx="2"
+            stroke="currentColor"
+            strokeWidth="1.8"
+          />
+          <path d="M4 10h16" stroke="currentColor" strokeWidth="1.8" />
+        </svg>
+      </div>
+      <p className="empty-state-title">{title}</p>
+      <p className="empty">{children}</p>
+    </div>
+  );
+}
+
+function SkeletonRows({ count = 3 }: { count?: number }) {
+  return (
+    <div className="skeleton-stack" aria-hidden>
+      {Array.from({ length: count }, (_, i) => (
+        <div key={i} className="skeleton-row" />
+      ))}
+    </div>
+  );
+}
+
+function ProductSkeletons() {
+  return (
+    <div className="card-grid" aria-hidden>
+      {Array.from({ length: 3 }, (_, i) => (
+        <div key={i} className="product-card skeleton-card">
+          <div className="skeleton skeleton-chip" />
+          <div className="skeleton skeleton-title" />
+          <div className="skeleton skeleton-line" />
+          <div className="skeleton skeleton-btn" />
+        </div>
+      ))}
+    </div>
   );
 }
 
@@ -488,10 +542,12 @@ export default function Dashboard() {
 
   const competitorList = (
     <div className="competitor-list">
-      {competitors.length === 0 ? (
-        <p className="empty">
-          No competitors yet. Add a store URL to start monitoring.
-        </p>
+      {loading ? (
+        <SkeletonRows count={3} />
+      ) : competitors.length === 0 ? (
+        <EmptyState title="No competitors yet">
+          Add a store URL to start monitoring sitemaps and new product launches.
+        </EmptyState>
       ) : (
         competitors.map((c) => (
           <article key={c.id} className="competitor-banner">
@@ -581,12 +637,12 @@ export default function Dashboard() {
       </div>
 
       {loading ? (
-        <p className="empty">Loading…</p>
+        <ProductSkeletons />
       ) : products.length === 0 ? (
-        <p className="empty">
-          No new products yet. After the first baseline scrape, newly appearing
-          sitemap URLs will show up here.
-        </p>
+        <EmptyState title="No new products yet">
+          After the first baseline scrape, newly appearing sitemap URLs will
+          show up here.
+        </EmptyState>
       ) : (
         <div className="card-grid">
           {products.map((product) => (
@@ -624,13 +680,17 @@ export default function Dashboard() {
   );
 
   const runsList = (
-    <div className="runs" style={{ marginTop: 0, paddingTop: 0, borderTop: 0 }}>
-      {runs.length === 0 ? (
-        <p className="empty">No scrape runs yet.</p>
+    <div className="runs plain">
+      {loading ? (
+        <SkeletonRows count={4} />
+      ) : runs.length === 0 ? (
+        <EmptyState title="No scrape runs yet">
+          Runs will appear here after the first competitor scrape.
+        </EmptyState>
       ) : (
         <ul>
           {runs.slice(0, 20).map((run) => (
-            <li key={run.id}>
+            <li key={run.id} className="run-row">
               <span className={`status status-${run.status}`}>{run.status}</span>
               <span>
                 {run.newCount} new / {run.urlsFound} urls ·{" "}
@@ -648,9 +708,12 @@ export default function Dashboard() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main-content">
+        Skip to content
+      </a>
       <AppSidebar active={nav} onNavigate={setNav} />
 
-      <main className="main-pane">
+      <main id="main-content" className="main-pane" aria-busy={loading}>
         <div className="page-header">
           <div>
             <h1>{titles[nav].title}</h1>
@@ -663,10 +726,10 @@ export default function Dashboard() {
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
               <path
-                d="M3.5 11.5 20 4l-4.2 16.2-3.6-6.4L3.5 11.5Z"
+                d="M12 5v14M5 12h14"
                 stroke="currentColor"
-                strokeWidth="1.7"
-                strokeLinejoin="round"
+                strokeWidth="1.8"
+                strokeLinecap="round"
               />
             </svg>
             New Competitor
@@ -744,7 +807,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <p className="stat-label">Total Competitors</p>
-                <p className="stat-value">{competitors.length}</p>
+                <p className="stat-value">
+                  {loading ? <span className="skeleton skeleton-stat" /> : competitors.length}
+                </p>
                 <span className="stat-trend flat">Tracked stores</span>
               </article>
               <article className="stat-card">
@@ -754,7 +819,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <p className="stat-label">Active Competitors</p>
-                <p className="stat-value">{activeCompetitors}</p>
+                <p className="stat-value">
+                  {loading ? <span className="skeleton skeleton-stat" /> : activeCompetitors}
+                </p>
                 <span className="stat-trend up">Enabled monitors</span>
               </article>
               <article className="stat-card">
@@ -764,7 +831,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <p className="stat-label">New Products</p>
-                <p className="stat-value">{products.length}</p>
+                <p className="stat-value">
+                  {loading ? <span className="skeleton skeleton-stat" /> : products.length}
+                </p>
                 <span className="stat-trend flat">Unseen cards</span>
               </article>
               <article className="stat-card">
@@ -774,7 +843,9 @@ export default function Dashboard() {
                   </svg>
                 </div>
                 <p className="stat-label">Scrape Success</p>
-                <p className="stat-value">{successRate}%</p>
+                <p className="stat-value">
+                  {loading ? <span className="skeleton skeleton-stat" /> : `${successRate}%`}
+                </p>
                 <span className={`stat-trend ${errorRuns > 0 ? "down" : "up"}`}>
                   {successRuns}/{runs.length || 0} recent runs
                 </span>
@@ -787,7 +858,11 @@ export default function Dashboard() {
                 </div>
                 <p className="stat-label">URLs Found</p>
                 <p className="stat-value">
-                  {urlsFoundTotal.toLocaleString()}
+                  {loading ? (
+                    <span className="skeleton skeleton-stat" />
+                  ) : (
+                    urlsFoundTotal.toLocaleString()
+                  )}
                 </p>
                 <span className="stat-trend flat">
                   {newCountTotal} newly detected
@@ -802,9 +877,11 @@ export default function Dashboard() {
                 <div className="donut-wrap">
                   <div
                     className="donut"
-                    style={{
-                      background: `conic-gradient(#6366f1 0 ${successRate}%, #e2e8f0 ${successRate}% 100%)`,
-                    }}
+                    style={
+                      {
+                        "--donut-success": `${successRate}%`,
+                      } as React.CSSProperties
+                    }
                   >
                     <div className="donut-hole">
                       <strong>{successRate}%</strong>
@@ -829,7 +906,7 @@ export default function Dashboard() {
                     <h2>Discovery Trend</h2>
                     <p className="panel-sub">URLs found vs newly detected</p>
                   </div>
-                  <div className="chart-legend" style={{ marginTop: 0 }}>
+                  <div className="chart-legend compact">
                     <span>
                       <i className="dot purple" /> Found
                     </span>
@@ -934,7 +1011,13 @@ export default function Dashboard() {
                         </svg>
                       </div>
                       <p className="stat-label">URLs Found</p>
-                      <p className="stat-value">{urlsFoundTotal.toLocaleString()}</p>
+                      <p className="stat-value">
+                        {loading ? (
+                          <span className="skeleton skeleton-stat" />
+                        ) : (
+                          urlsFoundTotal.toLocaleString()
+                        )}
+                      </p>
                     </article>
                     <article className="stat-card compact">
                       <div className="stat-icon green" aria-hidden>
@@ -944,7 +1027,9 @@ export default function Dashboard() {
                         </svg>
                       </div>
                       <p className="stat-label">Success Rate</p>
-                      <p className="stat-value">{successRate}%</p>
+                      <p className="stat-value">
+                        {loading ? <span className="skeleton skeleton-stat" /> : `${successRate}%`}
+                      </p>
                     </article>
                     <article className="stat-card compact">
                       <div className="stat-icon purple" aria-hidden>
@@ -953,7 +1038,9 @@ export default function Dashboard() {
                         </svg>
                       </div>
                       <p className="stat-label">Newly Detected</p>
-                      <p className="stat-value">{newCountTotal}</p>
+                      <p className="stat-value">
+                        {loading ? <span className="skeleton skeleton-stat" /> : newCountTotal}
+                      </p>
                     </article>
                     <article className="stat-card compact">
                       <div className="stat-icon orange" aria-hidden>
@@ -962,7 +1049,9 @@ export default function Dashboard() {
                         </svg>
                       </div>
                       <p className="stat-label">Error Runs</p>
-                      <p className="stat-value">{errorRuns}</p>
+                      <p className="stat-value">
+                        {loading ? <span className="skeleton skeleton-stat" /> : errorRuns}
+                      </p>
                     </article>
                   </div>
                 </section>

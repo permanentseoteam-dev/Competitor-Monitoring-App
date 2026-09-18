@@ -17,6 +17,7 @@ export default function LoginForm() {
           name="username"
           type="text"
           autoComplete="username"
+          placeholder="Your username"
           required
           maxLength={120}
           autoFocus
@@ -29,6 +30,7 @@ export default function LoginForm() {
           name="password"
           type="password"
           autoComplete="current-password"
+          placeholder="Your password"
           required
           maxLength={200}
         />

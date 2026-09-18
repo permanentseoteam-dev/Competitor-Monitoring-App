@@ -96,7 +96,7 @@ type Props = {
 export default function AppSidebar({ active, onNavigate }: Props) {
   return (
     <aside className="sidebar">
-      <div className="brand brand-icon-only" aria-label="Competitor Monitor">
+      <div className="brand" aria-label="Competitor Monitor">
         <span className="brand-orbit" aria-hidden>
           <span className="brand-core">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
@@ -106,6 +106,10 @@ export default function AppSidebar({ active, onNavigate }: Props) {
               />
             </svg>
           </span>
+        </span>
+        <span className="brand-copy">
+          <strong>Monitor</strong>
+          <span>Competitor intel</span>
         </span>
       </div>
 
@@ -130,6 +134,7 @@ export default function AppSidebar({ active, onNavigate }: Props) {
             <button
               type="button"
               className={`nav-item${active === item.key ? " active" : ""}`}
+              aria-current={active === item.key ? "page" : undefined}
               onClick={() => onNavigate(item.key)}
             >
               {item.icon}
@@ -151,12 +156,18 @@ export default function AppSidebar({ active, onNavigate }: Props) {
             />
             <circle cx="12" cy="17" r="0.8" fill="currentColor" />
           </svg>
-          Help Center
+          <span>Help Center</span>
         </a>
         <div className="profile-row">
-          <span className="avatar" aria-hidden>
-            CM
-          </span>
+          <div className="profile-identity">
+            <span className="avatar" aria-hidden>
+              CM
+            </span>
+            <span className="profile-copy">
+              <strong>CM Admin</strong>
+              <span>Signed in</span>
+            </span>
+          </div>
           <LogoutButton />
         </div>
       </div>
