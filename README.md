@@ -1,67 +1,70 @@
-# Competitor Monitor
+# Competitor Monitor (Node.js / Express)
 
-Always-on dashboard that watches competitor **sitemaps** and shows **newly appeared product URLs** as cards.
+Hostinger-ready **Node.js** app. Language: **JavaScript**. Framework: **Express**.
 
-## Features
+Tracks competitor **sitemaps** and shows **newly appeared product URLs**.
 
-- Start empty — add competitor store or sitemap URLs
-- Sitemap-only scraping (follows sitemap indexes; prefers product sitemaps when present)
-- First scrape baselines existing URLs (no feed spam)
-- Later scrapes surface only new URLs
-- Per-competitor interval: **5 / 8 / 12 / 16 / 18 / 20 hours** (used to schedule the next run after a scrape)
-- Manual “Scrape now” + optional **daily 9am** scheduled scrape (toggle in Settings)
-- Dashboard-only alerts (mark seen / mark all seen)
+## Stack
+
+| Piece | Technology |
+|--------|------------|
+| Runtime | Node.js 18+ (22 recommended on Hostinger) |
+| Server | Express (`server.js`) |
+| Pages | EJS + HTML |
+| Styles | CSS (`public/styles.css`) |
+| Browser UI | `public/dashboard.js` |
+| Storage | `data/store.json` on disk |
 
 ## Local development
 
 ```bash
-cd competitor-monitor
 npm install
-```
-
-Copy `.env.example` to `.env.local` and set:
-
-- `AUTH_USERNAME` / `AUTH_PASSWORD` — dashboard login
-- `SESSION_SECRET` — at least 32 characters (`openssl rand -base64 32`)
-
-Then:
-
-```bash
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). Unauthenticated visits go to `/login`. The dashboard, scrape APIs, and product APIs require a valid session. `/api/cron` still uses `CRON_SECRET` so Vercel Cron is unchanged.
+Open [http://localhost:3000](http://localhost:3000).
 
-Local data is stored in `data/store.json` (no Redis/Blob required).
+Copy `.env.example` to `.env` if you use one, or set env vars in the shell:
 
-## Deploy on Vercel
+- `AUTH_USERNAME` / `AUTH_PASSWORD` — dashboard login (defaults exist for local use)
+- `SESSION_SECRET` — at least 32 characters
+- `CRON_SECRET` — optional; required in production for `/api/cron`
+- `PORT` — Hostinger sets this; locally defaults to `3000`
 
-Vercel is serverless, so the app needs **durable storage**:
+## Hostinger deploy
 
-1. **Preferred:** [Upstash Redis](https://vercel.com/marketplace/upstash) from the Vercel project Storage / Integrations tab  
-   - sets `UPSTASH_REDIS_REST_URL` and `UPSTASH_REDIS_REST_TOKEN`
-2. **Alternative:** [Vercel Blob](https://vercel.com/docs/storage/vercel-blob)  
-   - sets `BLOB_READ_WRITE_TOKEN`
+1. Push this branch (`migration-to-nodejs`) to GitHub.
+2. hPanel → **Node.js Web App** (Unlimited / Business / Cloud with Node.js).
+3. Settings:
 
-Optional: set `CRON_SECRET` and Vercel will send it as `Authorization: Bearer …` to `/api/cron`.
+| Field | Value |
+|--------|--------|
+| Framework | Express |
+| Node.js | 22 |
+| Build command | *(empty)* |
+| Output directory | *(empty)* |
+| Entry file | `server.js` |
+| Start | `npm start` → `node server.js` |
 
-Also set `AUTH_USERNAME`, `AUTH_PASSWORD`, and `SESSION_SECRET` on the Vercel project so production login works.
+4. Env vars in hPanel: `AUTH_USERNAME`, `AUTH_PASSWORD`, `SESSION_SECRET`, `CRON_SECRET`, `NODE_ENV=production`.
+5. Cron (hPanel → Cron Jobs, Custom, **UTC**):
 
-```bash
-npx vercel --prod
+```text
+0 4 * * * curl -s -H "Authorization: Bearer YOUR_CRON_SECRET" https://YOUR-DOMAIN/api/cron
 ```
 
-Scheduling on Vercel:
+That is **09:00 Asia/Karachi**. Settings can turn the daily scrape **off** without removing the cron.
 
-- Daily scrape at **09:00 Pakistan time (UTC+5)** via `/api/cron` (`0 4 * * *` UTC), which can be turned **off** in Settings
-- The dashboard **does not poll** and **does not scrape** on page load or while it stays open
-- Manual **Scrape** / **Scrape all** and a one-time baseline when you add a store
-- Hobby plan only allows one cron per day; upgrade to Pro if you need more frequent platform crons (point them at `POST /api/tick` for due-only runs)
+## Features
 
-Do not call `/api/tick` from the client in a loop — that path exists for optional extra crons, not for live polling.
+- Add competitor store / sitemap URLs
+- Baseline on first scrape; later scrapes show new URLs only
+- Intervals: **5 / 8 / 12 / 16 / 18 / 20 hours**
+- Manual Scrape / Scrape all
+- Daily 9am schedule toggle in Settings
+- No dashboard polling (does not scrape while the page is open)
 
 ## Notes
 
-- If you paste a store homepage, the app tries `https://host/sitemap.xml`.
-- Product detection is heuristic for mixed e-commerce; dedicated product sitemaps work best.
-- Respect target sites’ terms and robots rules; this tool is for monitoring stores you are allowed to check.
+- Homepage URLs are normalized to `/sitemap.xml` when needed.
+- Respect target sites’ terms and robots rules.

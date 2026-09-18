@@ -4,7 +4,7 @@ const path = require("node:path");
 const express = require("express");
 const cookieParser = require("cookie-parser");
 
-const { requireAuth, optionalAuth } = require("./middleware/auth");
+const { requireAuth } = require("./middleware/auth");
 const pages = require("./routes/pages");
 const authRoutes = require("./routes/auth");
 const competitors = require("./routes/competitors");

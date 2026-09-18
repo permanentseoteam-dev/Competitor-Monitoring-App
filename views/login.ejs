@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · Competitor Monitor</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="login-shell">
+    <section class="login-panel">
+      <div class="login-brand">
+        <span class="brand-orbit" aria-hidden>
+          <span class="brand-core">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M4 7h16v11H4V7Zm3-3h10l1.5 3h-13L7 4Z" fill="currentColor" />
+            </svg>
+          </span>
+        </span>
+        <span class="brand-copy">
+          <strong>Monitor</strong>
+          <span>Competitor intel</span>
+        </span>
+      </div>
+      <p class="eyebrow">Secure access</p>
+      <h1>Sign in</h1>
+      <p class="lede">Enter your credentials to open the dashboard.</p>
+      <% if (error) { %>
+        <p class="error" role="alert"><%= error %></p>
+      <% } %>
+      <form class="add-form" method="post" action="/login">
+        <label>
+          Username
+          <input name="username" type="text" autocomplete="username" placeholder="Your username" required maxlength="120" autofocus />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" autocomplete="current-password" placeholder="Your password" required maxlength="200" />
+        </label>
+        <button type="submit" class="btn primary">Sign in</button>
+      </form>
+    </section>
+  </div>
+</body>
+</html>
