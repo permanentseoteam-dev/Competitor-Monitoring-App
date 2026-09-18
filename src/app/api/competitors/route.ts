@@ -4,8 +4,7 @@ import {
   createCompetitor,
   deleteCompetitor,
   getCompetitor,
-  getSettings,
-  listCompetitors,
+  getMonitorSnapshot,
   updateCompetitor,
 } from "@/lib/db";
 import { scrapeCompetitor } from "@/lib/scrape";
@@ -27,8 +26,7 @@ const createSchema = z.object({
 export async function GET() {
   const denied = await requireApiSession();
   if (denied) return denied;
-  const competitors = await listCompetitors();
-  const settings = await getSettings();
+  const { competitors, settings } = await getMonitorSnapshot();
   return Response.json({ competitors, settings });
 }
 

@@ -9,7 +9,7 @@ Always-on dashboard that watches competitor **sitemaps** and shows **newly appea
 - First scrape baselines existing URLs (no feed spam)
 - Later scrapes surface only new URLs
 - Per-competitor interval: **5 / 8 / 12 / 16 / 18 / 20 hours** (used to schedule the next run after a scrape)
-- Manual “Scrape now” + **one daily** scheduled scrape
+- Manual “Scrape now” + optional **daily 9am** scheduled scrape (toggle in Settings)
 - Dashboard-only alerts (mark seen / mark all seen)
 
 ## Local development
@@ -53,7 +53,7 @@ npx vercel --prod
 
 Scheduling on Vercel:
 
-- Daily scrape at **09:00 Pakistan time (UTC+5)** via `/api/cron` (`0 4 * * *` UTC)
+- Daily scrape at **09:00 Pakistan time (UTC+5)** via `/api/cron` (`0 4 * * *` UTC), which can be turned **off** in Settings
 - The dashboard **does not poll** and **does not scrape** on page load or while it stays open
 - Manual **Scrape** / **Scrape all** and a one-time baseline when you add a store
 - Hobby plan only allows one cron per day; upgrade to Pro if you need more frequent platform crons (point them at `POST /api/tick` for due-only runs)

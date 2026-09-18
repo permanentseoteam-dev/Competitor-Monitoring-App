@@ -1,7 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Competitor, IntervalHours, Product, ScrapeRun } from "@/lib/types";
+import type {
+  Competitor,
+  IntervalHours,
+  MonitorSettings,
+  Product,
+  ScrapeRun,
+} from "@/lib/types";
 import {
   INTERVAL_OPTIONS,
   intervalLabel,
@@ -247,6 +253,8 @@ export default function Dashboard() {
   const [sitemapUrl, setSitemapUrl] = useState("");
   const [intervalHours, setIntervalHours] = useState<IntervalHours>(5);
   const [bannerDismissed, setBannerDismissed] = useState(false);
+  const [dailyCronEnabled, setDailyCronEnabled] = useState(true);
+  const [savingSchedule, setSavingSchedule] = useState(false);
 
   useEffect(() => {
     if (!pricingBanner.enabled || pricingBanner.dismissible === false) return;
@@ -290,13 +298,19 @@ export default function Dashboard() {
         ),
       ]);
       if (!cRes.ok || !pRes.ok) throw new Error("Failed to load dashboard data");
-      const cJson = await readJson<{ competitors?: Competitor[] }>(cRes);
+      const cJson = await readJson<{
+        competitors?: Competitor[];
+        settings?: MonitorSettings;
+      }>(cRes);
       const pJson = await readJson<{ products?: Product[]; runs?: ScrapeRun[] }>(
         pRes,
       );
       setCompetitors(cJson.competitors ?? []);
       setProducts(pJson.products ?? []);
       setRuns(pJson.runs ?? []);
+      if (cJson.settings) {
+        setDailyCronEnabled(cJson.settings.dailyCronEnabled !== false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Load failed");
     } finally {
@@ -397,6 +411,35 @@ export default function Dashboard() {
       return;
     }
     await load();
+  }
+
+  async function onDailyCronToggle() {
+    const next = !dailyCronEnabled;
+    setDailyCronEnabled(next);
+    setSavingSchedule(true);
+    setError(null);
+    try {
+      const res = await apiFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyCronEnabled: next }),
+      });
+      const json = await readJson<{
+        settings?: MonitorSettings;
+        error?: string;
+      }>(res);
+      if (!res.ok) throw new Error(json.error || "Could not update schedule");
+      if (typeof json.settings?.dailyCronEnabled === "boolean") {
+        setDailyCronEnabled(json.settings.dailyCronEnabled);
+      }
+    } catch (err) {
+      setDailyCronEnabled(!next);
+      setError(
+        err instanceof Error ? err.message : "Could not update schedule",
+      );
+    } finally {
+      setSavingSchedule(false);
+    }
   }
 
   async function onDelete(id: string) {
@@ -1093,16 +1136,36 @@ export default function Dashboard() {
             <h2 className="section-title">Workspace</h2>
             <p className="panel-sub">
               Scrapes run when you click Scrape, when a store is first added
-              (baseline), and once daily at 9:00 AM Pakistan time. The dashboard
-              does not poll or scrape while it is open.
+              (baseline), and — if enabled below — once daily at 9:00 AM
+              Pakistan time. The dashboard does not poll or scrape while it is
+              open.
             </p>
+            {error ? <p className="error">{error}</p> : null}
             <div className="competitor-list">
               <article className="competitor-row">
                 <div>
-                  <strong>Daily cron</strong>
-                  <p className="muted">09:00 Asia/Karachi via /api/cron</p>
+                  <strong>Daily 9am scrape</strong>
+                  <p className="muted">
+                    09:00 Asia/Karachi via cron. Turn this off to skip the
+                    scheduled run; manual scrape still works.
+                  </p>
                 </div>
-                <span className="status-pill">ACTIVE</span>
+                <div className="schedule-controls">
+                  <span
+                    className={`status-pill${dailyCronEnabled ? "" : " paused"}`}
+                  >
+                    {dailyCronEnabled ? "ON" : "OFF"}
+                  </span>
+                  <button
+                    type="button"
+                    className={`switch${dailyCronEnabled ? " on" : ""}`}
+                    role="switch"
+                    aria-checked={dailyCronEnabled}
+                    aria-label="Daily 9am scrape schedule"
+                    disabled={savingSchedule}
+                    onClick={() => void onDailyCronToggle()}
+                  />
+                </div>
               </article>
               <article className="competitor-row">
                 <div>

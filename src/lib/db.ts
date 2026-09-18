@@ -266,10 +266,21 @@ function withNormalizedInterval(competitor: Competitor): Competitor {
 }
 
 export async function listCompetitors(): Promise<Competitor[]> {
+  const snapshot = await getMonitorSnapshot();
+  return snapshot.competitors;
+}
+
+export async function getMonitorSnapshot(): Promise<{
+  competitors: Competitor[];
+  settings: MonitorSettings;
+}> {
   const store = await readStore();
-  return [...store.competitors]
-    .map(withNormalizedInterval)
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return {
+    competitors: [...store.competitors]
+      .map(withNormalizedInterval)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    settings: normalizeSettings(store.settings),
+  };
 }
 
 export async function getCompetitor(id: string): Promise<Competitor | null> {
