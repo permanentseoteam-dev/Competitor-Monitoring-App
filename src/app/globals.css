@@ -258,6 +258,7 @@ button {
   display: grid;
   gap: var(--space-1);
   flex: 1;
+  align-content: start;
 }
 
 .nav-item {
@@ -956,6 +957,12 @@ button {
   display: grid;
   gap: var(--space-4);
   margin-top: var(--space-4);
+  max-width: 36rem;
+}
+
+.add-form > .btn {
+  justify-self: start;
+  min-width: 10rem;
 }
 
 .add-form label {
