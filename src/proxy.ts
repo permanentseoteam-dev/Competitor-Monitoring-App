@@ -12,6 +12,12 @@ function isCronPath(pathname: string): boolean {
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  // Old Firebase app used /dashboard; keep bookmarks working.
+  if (pathname === "/dashboard" || pathname.startsWith("/dashboard/")) {
+    return NextResponse.redirect(new URL("/", request.nextUrl));
+  }
+
   if (isCronPath(pathname) || isPublicPath(pathname)) {
     if (isPublicPath(pathname)) {
       const session = await decrypt(request.cookies.get(SESSION_COOKIE)?.value);
