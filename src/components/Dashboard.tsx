@@ -279,8 +279,6 @@ export default function Dashboard() {
   const load = useCallback(async () => {
     setError(null);
     try {
-      await apiFetch("/api/tick", { method: "POST" }).catch(() => null);
-
       const [cRes, pRes] = await Promise.all([
         apiFetch("/api/competitors"),
         apiFetch(
@@ -306,20 +304,9 @@ export default function Dashboard() {
     }
   }, [filterCompetitorId]);
 
-  const pollMs = useMemo(() => {
-    const now = Date.now();
-    const dueOrSoon = competitors.some((c) => {
-      if (!c.enabled || !c.nextScrapeAt) return false;
-      return new Date(c.nextScrapeAt).getTime() <= now + 60_000;
-    });
-    return dueOrSoon ? 15_000 : 30_000;
-  }, [competitors]);
-
   useEffect(() => {
     void load();
-    const id = window.setInterval(() => void load(), pollMs);
-    return () => window.clearInterval(id);
-  }, [load, pollMs]);
+  }, [load]);
 
   const activeCompetitors = useMemo(
     () => competitors.filter((c) => c.enabled).length,
@@ -391,7 +378,6 @@ export default function Dashboard() {
       setSitemapUrl("");
       setIntervalHours(3);
       setNav("competitors");
-      window.setTimeout(() => void load(), 2500);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Save failed");
@@ -1106,8 +1092,9 @@ export default function Dashboard() {
           <section className="panel-card">
             <h2 className="section-title">Workspace</h2>
             <p className="panel-sub">
-              Auto-scrape runs while this dashboard is open. A full scrape also
-              runs daily at 9:00 AM Pakistan time via cron.
+              Scrapes run when you click Scrape, when a store is first added
+              (baseline), and once daily at 9:00 AM Pakistan time. The dashboard
+              does not poll or scrape while it is open.
             </p>
             <div className="competitor-list">
               <article className="competitor-row">

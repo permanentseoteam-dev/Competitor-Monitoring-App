@@ -1,8 +1,5 @@
 import { listProducts, listRecentScrapeRuns, markAllProductsSeen, markProductSeen } from "@/lib/db";
 import { requireApiSession } from "@/lib/dal";
-import { scheduleDueScrapes } from "@/lib/scheduler";
-
-export const maxDuration = 60;
 
 export async function GET(request: Request) {
   const denied = await requireApiSession();
@@ -15,8 +12,6 @@ export async function GET(request: Request) {
     listProducts({ competitorId, newOnly }),
     listRecentScrapeRuns(12),
   ]);
-
-  scheduleDueScrapes();
 
   return Response.json({ products, runs });
 }

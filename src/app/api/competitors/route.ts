@@ -8,7 +8,6 @@ import {
   updateCompetitor,
 } from "@/lib/db";
 import { scrapeCompetitor } from "@/lib/scrape";
-import { scheduleDueScrapes } from "@/lib/scheduler";
 import { INTERVAL_OPTIONS } from "@/lib/types";
 import { requireApiSession } from "@/lib/dal";
 
@@ -28,8 +27,6 @@ export async function GET() {
   const denied = await requireApiSession();
   if (denied) return denied;
   const competitors = await listCompetitors();
-  // Hobby cron is daily-only; due scrapes also run when the dashboard polls.
-  scheduleDueScrapes();
   return Response.json({ competitors });
 }
 
