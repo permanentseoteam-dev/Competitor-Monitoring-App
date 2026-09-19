@@ -1,5 +1,3 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
 # dependencies
 /node_modules
 /.pnp
@@ -13,9 +11,11 @@
 # testing
 /coverage
 
-# next.js
+# next.js (legacy)
 /.next/
 /out/
+/legacy/**/.next/
+/legacy/**/node_modules/
 
 # production
 /build
@@ -30,7 +30,7 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# env files
 .env*
 !.env.example
 
@@ -41,12 +41,8 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# local sqlite
+# local data store
 /data
 
-.vercel
-.env*
-
-# leftover local folder after repo flatten
+# leftover nested Next app shell (only node_modules may remain)
 /competitor-monitor/
-

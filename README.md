@@ -4,15 +4,35 @@ Hostinger-ready **Node.js** app. Language: **JavaScript**. Framework: **Express*
 
 Tracks competitor **sitemaps** and shows **newly appeared product URLs**.
 
+## Project layout
+
+```text
+.
+├── server.js              # Entry point
+├── src/
+│   ├── app.js             # Express app wiring
+│   ├── middleware/        # Auth, etc.
+│   ├── routes/            # HTTP routes
+│   └── lib/               # DB, scrape, session, pricing…
+├── views/                 # EJS templates
+├── public/
+│   ├── css/styles.css
+│   ├── js/dashboard.js
+│   └── brand/             # Logos & icons
+├── data/                  # Runtime store (gitignored)
+├── docs/                  # Migration / ops notes
+└── legacy/                # Archived Next.js leftovers (not used)
+```
+
 ## Stack
 
 | Piece | Technology |
 |--------|------------|
 | Runtime | Node.js 18+ (22 recommended on Hostinger) |
 | Server | Express (`server.js`) |
-| Pages | EJS + HTML |
-| Styles | CSS (`public/styles.css`) |
-| Browser UI | `public/dashboard.js` |
+| Pages | EJS (`views/`) |
+| Styles | `public/css/styles.css` |
+| Browser UI | `public/js/dashboard.js` |
 | Storage | `data/store.json` on disk |
 
 ## Local development
@@ -68,3 +88,4 @@ That is **09:00 Asia/Karachi**. Settings can turn the daily scrape **off** witho
 
 - Homepage URLs are normalized to `/sitemap.xml` when needed.
 - Respect target sites’ terms and robots rules.
+- See `docs/` for migration notes; `legacy/` is archived Next.js code only.
