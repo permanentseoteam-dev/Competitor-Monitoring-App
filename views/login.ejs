@@ -3,28 +3,22 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sign in · Competitor Monitor</title>
+  <title>Sign in · Permanent SEO</title>
+  <link rel="icon" href="/brand/icon.jpg" type="image/jpeg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
+<body class="login-body">
   <div class="login-shell">
-    <section class="login-panel">
+    <section class="login-panel reveal-in">
       <div class="login-brand">
-        <span class="brand-orbit" aria-hidden>
-          <span class="brand-core">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M4 7h16v11H4V7Zm3-3h10l1.5 3h-13L7 4Z" fill="currentColor" />
-            </svg>
-          </span>
-        </span>
-        <span class="brand-copy">
-          <strong>Monitor</strong>
-          <span>Competitor intel</span>
-        </span>
+        <strong class="login-brand-name">Permanent SEO</strong>
       </div>
       <p class="eyebrow">Secure access</p>
-      <h1>Sign in</h1>
-      <p class="lede">Enter your credentials to open the dashboard.</p>
+      <h1>Welcome back</h1>
+      <p class="lede">Sign in to monitor competitors, catch new products, and run scrapes.</p>
       <% if (error) { %>
         <p class="error" role="alert"><%= error %></p>
       <% } %>
@@ -40,6 +34,9 @@
         <button type="submit" class="btn primary">Sign in</button>
       </form>
     </section>
+    <aside class="login-aside" aria-hidden="true">
+      <p>Growth-focused competitor intel for Permanent SEO teams.</p>
+    </aside>
   </div>
 </body>
 </html>

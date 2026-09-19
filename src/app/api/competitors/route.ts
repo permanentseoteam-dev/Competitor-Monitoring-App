@@ -10,6 +10,11 @@ import {
 import { scrapeCompetitor } from "@/lib/scrape";
 import { INTERVAL_OPTIONS } from "@/lib/types";
 import { requireApiSession } from "@/lib/dal";
+import {
+  competitorLimitReached,
+  formatCompetitorLimit,
+  getPlanLimits,
+} from "@/lib/planLimits";
 
 export const maxDuration = 60;
 
@@ -49,9 +54,26 @@ export async function POST(request: Request) {
   }
 
   try {
+    const snapshot = await getMonitorSnapshot();
+    const plan =
+      (snapshot.settings as { subscriptionPlan?: string } | undefined)
+        ?.subscriptionPlan || "basic";
+    const limits = getPlanLimits(plan);
+
+    if (competitorLimitReached(plan, snapshot.competitors.length)) {
+      return Response.json(
+        {
+          error: `Competitor limit reached (${formatCompetitorLimit(
+            limits.competitors,
+          )} on your ${limits.plan} plan). Upgrade to add more stores.`,
+          code: "COMPETITOR_LIMIT",
+        },
+        { status: 403 },
+      );
+    }
+
     const competitor = await createCompetitor(parsed.data);
 
-    // Confirm the write is readable before responding (Blob can be briefly stale).
     let saved = await getCompetitor(competitor.id);
     if (!saved) {
       await new Promise((r) => setTimeout(r, 250));
@@ -60,7 +82,6 @@ export async function POST(request: Request) {
 
     after(async () => {
       try {
-        // Small delay so the create write is visible to the scrape invocation.
         await new Promise((r) => setTimeout(r, 400));
         await scrapeCompetitor(competitor.id);
       } catch (error) {

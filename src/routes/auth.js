@@ -36,7 +36,7 @@ router.post("/login", async (req, res) => {
   if (!isAuthConfigured()) {
     return res.status(500).render("login", {
       error:
-        "Login is not configured. Set AUTH_USERNAME, AUTH_PASSWORD, and SESSION_SECRET.",
+        "Login is not configured. Set SESSION_SECRET (and optionally seed AUTH_USERNAME / AUTH_PASSWORD).",
       title: "Sign in",
     });
   }
@@ -59,8 +59,11 @@ router.post("/login", async (req, res) => {
     });
   }
 
-  const ok = verifyCredentials(parsed.data.username, parsed.data.password);
-  if (!ok) {
+  const profile = await verifyCredentials(
+    parsed.data.username,
+    parsed.data.password,
+  );
+  if (!profile) {
     await delayFailedLogin();
     return res.status(401).render("login", {
       error: "Invalid username or password.",
@@ -68,7 +71,7 @@ router.post("/login", async (req, res) => {
     });
   }
 
-  await createSession(res, "operator");
+  await createSession(res, profile);
   return res.redirect("/");
 });
 

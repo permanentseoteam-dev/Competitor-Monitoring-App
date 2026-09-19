@@ -11,6 +11,7 @@ const competitors = require("./routes/competitors");
 const products = require("./routes/products");
 const scrape = require("./routes/scrape");
 const settings = require("./routes/settings");
+const profiles = require("./routes/profiles");
 const cron = require("./routes/cron");
 const tick = require("./routes/tick");
 
@@ -32,6 +33,8 @@ function createApp() {
   app.use(products);
   app.use(scrape);
   app.use(settings);
+  app.use(profiles);
+  app.use(require("./routes/pricing"));
   app.use(tick);
   app.use(pages);
 

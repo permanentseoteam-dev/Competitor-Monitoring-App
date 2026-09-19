@@ -4,6 +4,7 @@ const {
   getSettings,
   listCompetitors,
   listDueCompetitors,
+  purgeExpiredProducts,
   updateCompetitor,
 } = require("./db");
 const { scrapeCompetitor } = require("./scrape");
@@ -30,6 +31,7 @@ async function scrapeClaimed(competitorId, competitorName) {
 }
 
 async function runDueScrapes() {
+  await purgeExpiredProducts();
   const due = await listDueCompetitors();
   let ran = 0;
   for (const competitor of due) {
@@ -39,6 +41,7 @@ async function runDueScrapes() {
 }
 
 async function runDailyMorningScrapes() {
+  await purgeExpiredProducts();
   if (!(await getSettings()).dailyCronEnabled) return 0;
 
   const competitors = (await listCompetitors()).filter((c) => c.enabled);

@@ -3,52 +3,87 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Dashboard · Competitor Monitor</title>
+  <title>Permanent SEO · Competitor Monitor</title>
+  <link rel="icon" href="/brand/icon.jpg" type="image/jpeg" />
+  <link rel="apple-touch-icon" href="/brand/icon.jpg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="app-shell">
     <a class="skip-link" href="#main-content">Skip to content</a>
     <aside class="sidebar">
-      <div class="brand" aria-label="Competitor Monitor">
-        <span class="brand-orbit" aria-hidden>
-          <span class="brand-core">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
-              <path d="M4 7h16v11H4V7Zm3-3h10l1.5 3h-13L7 4Z" fill="currentColor" />
-            </svg>
-          </span>
-        </span>
-        <span class="brand-copy">
-          <strong>Monitor</strong>
-          <span>Competitor intel</span>
-        </span>
+      <div class="brand" aria-label="Permanent SEO">
+        <div class="brand-role-chip">
+          <span class="brand-role-dot" aria-hidden></span>
+          <strong id="brand-name">Role</strong>
+          <span id="brand-tagline">Signed in</span>
+        </div>
       </div>
 
-      <button type="button" class="workspace-switch">
-        <span class="workspace-left">
-          <span class="workspace-dot" aria-hidden></span>
-          Monitor&apos;s
-        </span>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-          <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
-        </svg>
-      </button>
-
       <ul class="nav-list" id="nav-list">
-        <li><button type="button" class="nav-item active" data-nav="dashboard">Dashboard</button></li>
-        <li><button type="button" class="nav-item" data-nav="competitors">Competitors</button></li>
-        <li><button type="button" class="nav-item" data-nav="products">New Products</button></li>
-        <li><button type="button" class="nav-item" data-nav="runs">Scrape Runs</button></li>
-        <li><button type="button" class="nav-item" data-nav="settings">Settings</button></li>
+        <li>
+          <button type="button" class="nav-item active" data-nav="dashboard">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M4 4h7v7H4V4Zm9 0h7v5h-7V4ZM4 13h7v7H4v-7Zm9 3h7v4h-7v-4Z" stroke="currentColor" stroke-width="1.8"/></svg>
+            Dashboard
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-item" data-nav="competitors">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 3 4 7v5c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10V7l-8-4Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            Competitors
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-item" data-nav="products">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M4 7h16v12H4V7Zm2-3h12l2 3H4l2-3Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            New Products
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-item" data-nav="runs">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M4 19V5m4 14V9m4 10V7m4 12v-6m4 6V4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Scrape Runs
+          </button>
+        </li>
+        <li>
+          <button type="button" class="nav-item" data-nav="settings">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z" stroke="currentColor" stroke-width="1.8"/><path d="M19.4 13a7.8 7.8 0 0 0 .1-2l2-1.2-2-3.4-2.3.6a7.6 7.6 0 0 0-1.7-1L15 4h-6l-.5 2.2a7.6 7.6 0 0 0-1.7 1L4.5 6.6l-2 3.4 2 1.2a7.8 7.8 0 0 0 0 2l-2 1.2 2 3.4 2.3-.6a7.6 7.6 0 0 0 1.7 1L9 20h6l.5-2.2a7.6 7.6 0 0 0 1.7-1l2.3.6 2-3.4-2-1.2Z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg>
+            Settings
+          </button>
+        </li>
+        <li id="nav-pricing-item">
+          <button type="button" class="nav-item" data-nav="pricing">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 3v18M7 8h7.5a2.5 2.5 0 0 1 0 5H9.5a2.5 2.5 0 0 0 0 5H17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Pricing
+          </button>
+        </li>
       </ul>
 
       <div class="sidebar-footer">
+        <button type="button" class="sidebar-upgrade" id="sidebar-upgrade-cta" data-nav="pricing">
+          <span class="sidebar-upgrade-ico" aria-hidden>◆</span>
+          <span>
+            <strong>Upgrade plan</strong>
+            <small>Unlock more stores & scrapes</small>
+          </span>
+        </button>
+        <button type="button" class="help-link" id="help-centre-btn" data-nav="help">
+          <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.8" />
+            <path d="M9.5 9.5a2.5 2.5 0 1 1 3.7 2.2c-.7.4-1.2.9-1.2 1.8V14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            <circle cx="12" cy="17" r="0.8" fill="currentColor" />
+          </svg>
+          <span>Help Centre</span>
+        </button>
         <div class="profile-row">
           <div class="profile-identity">
-            <span class="avatar" aria-hidden>CM</span>
+            <span class="avatar is-initials" id="sidebar-avatar" aria-hidden>AD</span>
             <span class="profile-copy">
-              <strong>CM Admin</strong>
-              <span>Signed in</span>
+              <strong id="sidebar-user-name">Signed in</strong>
+              <span id="sidebar-user-role">seo-analystic</span>
             </span>
           </div>
           <form action="/logout" method="post">
@@ -63,25 +98,57 @@
       </div>
     </aside>
 
-    <main id="main-content" class="main-pane">
-      <div class="page-header">
-        <div>
-          <h1 id="page-title">Dashboard</h1>
-          <p id="page-subtitle">Welcome back! Here's your competitor monitoring overview.</p>
-        </div>
-        <button type="button" class="btn primary" id="btn-new-competitor">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+    <div class="workspace">
+      <header class="topbar">
+        <label class="topbar-search">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="1.8" />
+            <path d="m20 20-3.5-3.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
           </svg>
-          New Competitor
-        </button>
-      </div>
+          <input id="global-search" type="search" placeholder="Search competitors, products…" autocomplete="off" />
+        </label>
+        <div class="topbar-actions">
+          <span id="topbar-monitor-status" class="topbar-status">Connecting…</span>
+          <div class="topbar-user">
+            <span class="avatar topbar-avatar is-initials" id="topbar-avatar" aria-hidden>AD</span>
+            <div>
+              <strong id="topbar-user-name">Signed in</strong>
+              <span id="topbar-user-role">Role</span>
+            </div>
+          </div>
+        </div>
+      </header>
 
-      <div id="pricing-banner-root"></div>
-      <p id="global-error" class="error" hidden></p>
-      <div id="view-root" aria-busy="true"></div>
-    </main>
+      <main id="main-content" class="main-pane">
+        <div class="page-header">
+          <div class="page-header-copy">
+            <div>
+              <h1 id="page-title">Dashboard</h1>
+              <p id="page-subtitle">Welcome back! Here's your competitor monitoring overview.</p>
+            </div>
+          </div>
+          <div class="page-header-actions">
+            <button type="button" class="btn scrape-all" id="btn-scrape-all" hidden disabled>
+              Scrape All Now
+            </button>
+            <button type="button" class="btn primary" id="btn-new-competitor">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+              </svg>
+              New Competitor
+            </button>
+          </div>
+        </div>
+
+        <div id="pricing-banner-root"></div>
+        <p id="global-error" class="error" hidden></p>
+        <div id="view-root" aria-busy="true"></div>
+      </main>
+    </div>
   </div>
+
+  <div id="upgrade-nag-root" class="upgrade-nag-root" hidden></div>
+  <div id="upgrade-toast" class="upgrade-toast" hidden role="status" aria-live="polite"></div>
 
   <script>
     window.__CM__ = {

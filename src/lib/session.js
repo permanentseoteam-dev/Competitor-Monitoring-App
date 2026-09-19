@@ -1,6 +1,7 @@
 "use strict";
 
 const { SignJWT, jwtVerify } = require("jose");
+const { normalizeRole } = require("./roles");
 
 const SESSION_COOKIE = "session";
 const DEFAULT_SESSION_SECRET =
@@ -52,16 +53,31 @@ async function decrypt(session) {
       typeof payload.expiresAt === "string" ? payload.expiresAt : null;
     if (!userId || !expiresAt) return null;
     if (new Date(expiresAt).getTime() <= Date.now()) return null;
-    return { userId, expiresAt };
+    return {
+      userId,
+      username:
+        typeof payload.username === "string" ? payload.username : "user",
+      displayName:
+        typeof payload.displayName === "string"
+          ? payload.displayName
+          : typeof payload.username === "string"
+            ? payload.username
+            : "User",
+      role: normalizeRole(payload.role),
+      expiresAt,
+    };
   } catch {
     return null;
   }
 }
 
-async function createSession(res, userId) {
+async function createSession(res, user) {
   const expiresAt = new Date(Date.now() + SESSION_DURATION_MS);
   const token = await encrypt({
-    userId,
+    userId: user.id || user.userId || "user",
+    username: user.username || "user",
+    displayName: user.displayName || user.username || "User",
+    role: normalizeRole(user.role),
     expiresAt: expiresAt.toISOString(),
   });
   res.cookie(SESSION_COOKIE, token, cookieOptions(expiresAt));

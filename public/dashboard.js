@@ -4,14 +4,52 @@
     competitors: [],
     products: [],
     runs: [],
-    settings: { dailyCronEnabled: true },
+    settings: {
+      dailyCronEnabled: true,
+      brandName: "Permanent SEO",
+      brandTagline: "Competitor intel",
+      accentColor: "#2B59FF",
+      pricingOfferEndsAt: null,
+      subscriptionPlan: "basic",
+      manualScrapePeriod: null,
+      manualScrapeUsed: 0,
+    },
+    planUsage: null,
+    profiles: [],
+    user: {
+      id: null,
+      username: null,
+      displayName: null,
+      role: "seo-analystic",
+      avatarEmoji: "👔",
+      avatarImage: "",
+    },
+    avatarEmojis: ["👔", "🧑‍💼", "👨‍💻", "👩‍💻", "🧑‍🔬", "📊", "🎯", "🚀", "⭐", "💼"],
+    savingAvatar: false,
+    savingCustomization: false,
+    savingProfile: false,
+    billingCycle: "monthly",
+    basicTierId: "basic-8h",
+    pricingPlans: null,
+    featureSections: null,
+    planIncludes: null,
+    trustBadges: null,
+    pricingFaqs: null,
+    yearlyDiscount: 0.1,
+    pricingTimerId: null,
+    choosingPlan: false,
+    helpOption: "ticket",
+    competitorRange: "7d",
     filterCompetitorId: "all",
+    productView: "active",
     loading: true,
     saving: false,
     scraping: false,
     savingSchedule: false,
     error: null,
-    bannerDismissed: false,
+    bannerSnoozed: false,
+    nagNavCount: 0,
+    showAddForm: false,
     form: { name: "", sitemapUrl: "", intervalHours: 5 },
   };
 
@@ -26,7 +64,7 @@
     },
     products: {
       title: "New Products",
-      subtitle: "Fresh sitemap URLs detected after baseline scrapes.",
+      subtitle: "Review new finds, flag uploads, or move items to the recycle bin.",
     },
     runs: {
       title: "Scrape Runs",
@@ -34,8 +72,48 @@
     },
     settings: {
       title: "Settings",
-      subtitle: "Workspace preferences for this monitor.",
+      subtitle: "Login profiles, customization, and daily scrape schedule.",
     },
+    pricing: {
+      title: "Plans & pricing",
+      subtitle: "Compare plans, switch billing term, and upgrade when you outgrow Basic.",
+    },
+    help: {
+      title: "Help Centre",
+      subtitle: "Open a ticket, chat on WhatsApp, or email the support team.",
+    },
+  };
+
+  const HELP_WHATSAPP = "+44 7400 736827";
+  const HELP_WHATSAPP_LINK = "https://wa.me/447400736827";
+  const HELP_EMAIL = "admin@permanentseo.com";
+  const DEFAULT_FEATURE_SECTIONS = [
+    {
+      title: "Monitor with:",
+      rows: [
+        { id: "competitors", label: "Competitor stores", basic: "2", essential: "4", advance: "Unlimited" },
+        { id: "scrapeNow", label: "Scrape now / month", basic: "4", essential: "8", advance: "12" },
+        { id: "intervals", label: "Scrape interval options", basic: "3", essential: "3", advance: "All" },
+        { id: "manual", label: "Manual scrape anytime", basic: true, essential: true, advance: true },
+        { id: "cards", label: "New product cards", basic: true, essential: true, advance: true },
+      ],
+    },
+    {
+      title: "Operate & grow:",
+      rows: [
+        { id: "upload", label: "Upload queue + 10-day recycle", basic: false, essential: true, advance: true },
+        { id: "daily", label: "Daily 8am scrape schedule", basic: false, essential: true, advance: true },
+        { id: "profiles", label: "Login profiles & roles", basic: false, essential: false, advance: true },
+        { id: "priority", label: "Priority scrape runs", basic: false, essential: false, advance: true },
+        { id: "admin", label: "Admin pricing & offer timer", basic: false, essential: false, advance: true },
+      ],
+    },
+  ];
+
+  const FALLBACK_PLAN_LIMITS = {
+    basic: { competitors: 2, scrapeNow: 4 },
+    essential: { competitors: 4, scrapeNow: 8 },
+    advance: { competitors: null, scrapeNow: 12 },
   };
 
   const root = document.getElementById("view-root");
@@ -43,7 +121,11 @@
   const subtitleEl = document.getElementById("page-subtitle");
   const errorEl = document.getElementById("global-error");
   const bannerRoot = document.getElementById("pricing-banner-root");
+  const upgradeNagRoot = document.getElementById("upgrade-nag-root");
+  const upgradeToast = document.getElementById("upgrade-toast");
   const cfg = window.__CM__ || { pricingBanner: { enabled: false }, intervalOptions: [5, 8, 12, 16, 18, 20] };
+  const UPGRADE_SNOOZE_KEY = cfg.pricingBanner?.storageKey || "cm-upgrade-snooze-until";
+  const UPGRADE_SNOOZE_MS = Number(cfg.pricingBanner?.snoozeMs) || 45 * 60 * 1000;
 
   function escapeHtml(value) {
     return String(value ?? "")
@@ -67,6 +149,66 @@
     } catch {
       return url;
     }
+  }
+
+  function faviconUrl(url) {
+    const host = hostFromUrl(url);
+    if (!host || host === url) return "";
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=64`;
+  }
+
+  function previewImageUrl(url) {
+    return `https://image.thum.io/get/width/640/crop/400/noanimate/${url}`;
+  }
+
+  function productCardHtml(p, view) {
+    const favicon = faviconUrl(p.url);
+    const preview = previewImageUrl(p.url);
+    const timeLabel = formatWhen(p.firstSeenAt);
+    const actions =
+      view === "recycle"
+        ? `
+          <button type="button" class="btn primary" data-action="restore">Restore</button>
+          <span class="recycle-meta">${escapeHtml(String(p.recycleDaysLeft ?? 0))} day(s) left</span>
+        `
+        : `
+          <button type="button" class="btn primary" data-action="needs_upload">Upload</button>
+          <button type="button" class="btn scrape-all" data-action="delete" title="Mark as deleted">
+            <span class="btn-label-full">Mark as deleted</span>
+            <span class="btn-label-short">Delete</span>
+          </button>
+        `;
+
+    return `
+      <article class="product-card" data-id="${escapeHtml(p.id)}">
+        <div class="product-card-head">
+          <span class="product-favicon-wrap" aria-hidden>
+            ${
+              favicon
+                ? `<img class="product-favicon" src="${escapeHtml(favicon)}" alt="" width="20" height="20" loading="lazy" />`
+                : `<span class="product-favicon-fallback"></span>`
+            }
+          </span>
+          <div class="product-card-head-copy">
+            <span class="product-store">${escapeHtml(p.competitorName || hostFromUrl(p.url))}</span>
+            <time class="product-time" datetime="${escapeHtml(p.firstSeenAt || "")}">${escapeHtml(timeLabel)}</time>
+          </div>
+        </div>
+        <a class="product-image-link" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer" aria-label="Open ${escapeHtml(p.title)}">
+          <img
+            class="product-image"
+            src="${escapeHtml(preview)}"
+            alt=""
+            loading="lazy"
+            data-fallback="1"
+          />
+        </a>
+        <h3 class="product-title">${escapeHtml(p.title)}</h3>
+        <div class="card-actions">
+          ${actions}
+        </div>
+      </article>
+    `;
   }
 
   async function apiFetch(url, init) {
@@ -124,6 +266,44 @@
     `;
   }
 
+  function competitorRangeMs(range) {
+    if (range === "1m") return 30 * 24 * 60 * 60 * 1000;
+    if (range === "3m") return 90 * 24 * 60 * 60 * 1000;
+    return 7 * 24 * 60 * 60 * 1000;
+  }
+
+  function competitorsInRange() {
+    const windowMs = competitorRangeMs(state.competitorRange || "7d");
+    const cutoff = Date.now() - windowMs;
+    return state.competitors.filter((c) => {
+      const stamp = Date.parse(c.lastScrapedAt || c.createdAt || "");
+      if (!Number.isFinite(stamp)) return true;
+      return stamp >= cutoff;
+    });
+  }
+
+  function competitorRangeSelectHtml() {
+    const current = state.competitorRange || "7d";
+    const options = [
+      { id: "7d", label: "7 days" },
+      { id: "1m", label: "1 month" },
+      { id: "3m", label: "3 months" },
+    ];
+    return `
+      <label class="range-filter">
+        <span>Range</span>
+        <select id="competitor-range" aria-label="Competitor activity range">
+          ${options
+            .map(
+              (o) =>
+                `<option value="${o.id}" ${o.id === current ? "selected" : ""}>${o.label}</option>`,
+            )
+            .join("")}
+        </select>
+      </label>
+    `;
+  }
+
   function intervalOptionsHtml(selected) {
     return (cfg.intervalOptions || [5, 8, 12, 16, 18, 20])
       .map(
@@ -134,6 +314,7 @@
   }
 
   function competitorListHtml() {
+    const list = competitorsInRange();
     if (state.loading) {
       return `<div class="skeleton-stack" aria-hidden><div class="skeleton-row"></div><div class="skeleton-row"></div></div>`;
     }
@@ -143,29 +324,62 @@
         "Add a store URL to start monitoring sitemaps and new product launches.",
       );
     }
+    if (!list.length) {
+      return emptyState(
+        "No activity in this range",
+        "Try a wider window, or scrape a competitor to refresh activity.",
+      );
+    }
     return `
       <div class="competitor-list">
-        ${state.competitors
+        ${list
           .map((c) => {
             const initial = (c.name.trim().charAt(0) || "C").toUpperCase();
+            const sampleProducts = state.products
+              .filter((p) => p.competitorId === c.id && !p.deletedAt)
+              .slice(0, 3);
+            const sampleHtml = sampleProducts.length
+              ? `
+                <div class="competitor-sample-products">
+                  ${sampleProducts
+                    .map(
+                      (p) => `
+                    <a class="competitor-sample-chip" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">
+                      ${escapeHtml(p.title)}
+                    </a>
+                  `,
+                    )
+                    .join("")}
+                </div>
+              `
+              : `<p class="muted competitor-sample-empty">No sample products yet for this store.</p>`;
             return `
               <article class="competitor-banner" data-id="${escapeHtml(c.id)}">
-                <div class="competitor-banner-left">
-                  <span class="competitor-avatar" aria-hidden>${escapeHtml(initial)}</span>
-                  <div>
-                    <div class="competitor-title-row">
-                      <strong>${escapeHtml(c.name)}</strong>
-                      <span class="status-pill">ACTIVE</span>
+                <div class="competitor-banner-main">
+                  <div class="competitor-banner-left">
+                    <span class="competitor-avatar" aria-hidden>${escapeHtml(initial)}</span>
+                    <div class="competitor-copy">
+                      <div class="competitor-title-row">
+                        <strong>${escapeHtml(c.name)}</strong>
+                        <span class="status-pill">ACTIVE</span>
+                      </div>
+                      <p class="url-line">${escapeHtml(hostFromUrl(c.sitemapUrl))}</p>
+                      <p class="muted competitor-meta">Created ${escapeHtml(formatWhen(c.createdAt))} · Next ${escapeHtml(formatWhen(c.nextScrapeAt))}</p>
                     </div>
-                    <p class="url-line">${escapeHtml(hostFromUrl(c.sitemapUrl))}</p>
-                    <p class="muted">Created ${escapeHtml(formatWhen(c.createdAt))} · Next ${escapeHtml(formatWhen(c.nextScrapeAt))}</p>
                   </div>
+                  ${sampleHtml}
                 </div>
                 <div class="competitor-actions">
                   <select data-action="interval" aria-label="Interval for ${escapeHtml(c.name)}">
                     ${intervalOptionsHtml(c.intervalHours)}
                   </select>
-                  <button type="button" class="btn ghost" data-action="scrape" ${state.scraping ? "disabled" : ""}>Scrape</button>
+                  <button type="button" class="btn ghost" data-action="scrape" ${
+                    state.scraping || !canScrapeNow() ? "disabled" : ""
+                  } title="${
+                    canScrapeNow()
+                      ? `${scrapeNowLeft()} Scrape now left this month`
+                      : "Scrape now limit reached — upgrade for more"
+                  }">Scrape</button>
                   <button type="button" class="btn danger-outline" data-action="delete">Remove</button>
                 </div>
               </article>
@@ -187,38 +401,42 @@
       ),
     ].join("");
 
+    const view = state.productView || "active";
+    const emptyCopy = {
+      active: [
+        "No new products yet",
+        "After the first baseline scrape, newly appearing sitemap URLs will show up here.",
+      ],
+      needs_upload: [
+        "Nothing flagged for upload",
+        "Use Upload on a product card to move it here.",
+      ],
+      recycle: [
+        "Recycle bin is empty",
+        "Deleted products stay here for 10 days, then are permanently removed.",
+      ],
+    };
+
     let body = "";
     if (state.loading) {
       body = `<div class="card-grid" aria-hidden>
-        <div class="product-card skeleton-card"><div class="skeleton skeleton-chip"></div><div class="skeleton skeleton-title"></div></div>
-        <div class="product-card skeleton-card"><div class="skeleton skeleton-chip"></div><div class="skeleton skeleton-title"></div></div>
+        <div class="product-card skeleton-card">
+          <div class="skeleton skeleton-chip"></div>
+          <div class="skeleton product-image-skeleton"></div>
+          <div class="skeleton skeleton-title"></div>
+        </div>
+        <div class="product-card skeleton-card">
+          <div class="skeleton skeleton-chip"></div>
+          <div class="skeleton product-image-skeleton"></div>
+          <div class="skeleton skeleton-title"></div>
+        </div>
       </div>`;
     } else if (!state.products.length) {
-      body = emptyState(
-        "No new products yet",
-        "After the first baseline scrape, newly appearing sitemap URLs will show up here.",
-      );
+      body = emptyState(emptyCopy[view][0], emptyCopy[view][1]);
     } else {
       body = `
         <div class="card-grid">
-          ${state.products
-            .map(
-              (p) => `
-            <article class="product-card" data-id="${escapeHtml(p.id)}">
-              <div class="card-top">
-                <span class="badge">${escapeHtml(p.competitorName)}</span>
-                <time>${escapeHtml(formatWhen(p.firstSeenAt))}</time>
-              </div>
-              <h3>${escapeHtml(p.title)}</h3>
-              <p class="url-line">${escapeHtml(hostFromUrl(p.url))}</p>
-              <div class="card-actions">
-                <a class="btn primary" href="${escapeHtml(p.url)}" target="_blank" rel="noreferrer">Open product</a>
-                <button type="button" class="btn ghost" data-action="seen">Mark seen</button>
-              </div>
-            </article>
-          `,
-            )
-            .join("")}
+          ${state.products.map((p) => productCardHtml(p, view)).join("")}
         </div>
       `;
     }
@@ -237,10 +455,12 @@
         </div>
         <div class="feed-controls">
           <select id="filter-competitor">${options}</select>
-          <button type="button" class="btn ghost" id="mark-all-seen" ${
-            state.products.length ? "" : "disabled"
-          }>Mark all seen</button>
         </div>
+      </div>
+      <div class="product-view-tabs" role="tablist" aria-label="Product lists">
+        <button type="button" class="product-view-tab ${view === "active" ? "active" : ""}" data-product-view="active">Active</button>
+        <button type="button" class="product-view-tab ${view === "needs_upload" ? "active" : ""}" data-product-view="needs_upload">Need to upload</button>
+        <button type="button" class="product-view-tab ${view === "recycle" ? "active" : ""}" data-product-view="recycle">Recycle bin</button>
       </div>
       ${body}
     `;
@@ -268,56 +488,386 @@
     };
   }
 
+  function sparklinePath(values, width = 120, height = 36) {
+    if (!values.length) return "";
+    const max = Math.max(...values, 1);
+    const min = Math.min(...values, 0);
+    const span = Math.max(max - min, 1);
+    return values
+      .map((v, i) => {
+        const x = (i / Math.max(values.length - 1, 1)) * width;
+        const y = height - ((v - min) / span) * (height - 4) - 2;
+        return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)}`;
+      })
+      .join(" ");
+  }
+
+  function areaChartSvg(points) {
+    const width = 520;
+    const height = 180;
+    const vals = points.length ? points : [2, 4, 3, 6, 5, 8, 7, 9, 6, 10, 8, 12];
+    const line = sparklinePath(vals, width, height);
+    const max = Math.max(...vals, 1);
+    const area = `${line} L${width} ${height} L0 ${height} Z`;
+    return `
+      <svg class="area-chart" viewBox="0 0 ${width} ${height}" role="img" aria-label="Scrape activity over recent runs">
+        <defs>
+          <linearGradient id="areaFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#2B59FF" stop-opacity="0.35" />
+            <stop offset="100%" stop-color="#2B59FF" stop-opacity="0.02" />
+          </linearGradient>
+        </defs>
+        <path d="${area}" fill="url(#areaFill)" />
+        <path d="${line}" fill="none" stroke="#2B59FF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" />
+        <text x="8" y="18" fill="#64748b" font-size="11">Peak ${max}</text>
+      </svg>
+    `;
+  }
+
+  function donutSvg(parts) {
+    const total = parts.reduce((s, p) => s + p.value, 0) || 1;
+    const r = 54;
+    const c = 2 * Math.PI * r;
+    let offset = 0;
+    const rings = parts
+      .map((p) => {
+        const len = (p.value / total) * c;
+        const dash = `${len} ${c - len}`;
+        const el = `<circle cx="70" cy="70" r="${r}" fill="none" stroke="${p.color}" stroke-width="16" stroke-dasharray="${dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 70 70)" />`;
+        offset += len;
+        return el;
+      })
+      .join("");
+    return `
+      <div class="donut-wrap">
+        <svg width="140" height="140" viewBox="0 0 140 140" aria-hidden>${rings}</svg>
+        <div class="donut-center">
+          <strong>${total}</strong>
+          <span>items</span>
+        </div>
+      </div>
+    `;
+  }
+
+  function userInitials() {
+    const name = String(
+      state.user?.displayName || state.user?.username || "PS",
+    ).trim();
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+    }
+    return name.slice(0, 2).toUpperCase() || "PS";
+  }
+
+  function planDisplayName(plan) {
+    const key = plan || currentPlanId();
+    if (key === "essential") return "Essential";
+    if (key === "advance") return "Advance";
+    return "Basic";
+  }
+
   function renderDashboard() {
     const s = stats();
+    const firstName = (
+      state.user.displayName ||
+      state.user.username ||
+      "there"
+    )
+      .split(/\s+/)[0];
+    const runPoints = state.runs
+      .slice(0, 12)
+      .reverse()
+      .map(
+        (r) =>
+          Number(r.newCount || 0) +
+          Math.max(1, Math.round((r.urlsFound || 0) / 80)),
+      );
+    const activeProducts = state.products.filter(
+      (p) => !p.deletedAt && p.isNew,
+    ).length;
+    const uploadProducts = state.products.filter(
+      (p) => !p.deletedAt && p.needsUpload,
+    ).length;
+    const recycleProducts = state.products.filter((p) => p.deletedAt).length;
+    const donutParts = [
+      {
+        label: "Active new",
+        value:
+          Math.max(
+            activeProducts,
+            state.productView === "active" ? state.products.length : 0,
+          ) ||
+          state.products.filter((p) => !p.deletedAt).length ||
+          1,
+        color: "#2B59FF",
+      },
+      {
+        label: "Need upload",
+        value: Math.max(uploadProducts, 1),
+        color: "#4D78FF",
+      },
+      {
+        label: "Recycle",
+        value:
+          Math.max(
+            recycleProducts,
+            state.productView === "recycle" ? state.products.length : 0,
+          ) || 1,
+        color: "#152A5C",
+      },
+    ];
+
+    const laneSparks = [
+      [3, 5, 4, 7, 6, 9, 8],
+      [2, 3, 6, 5, 8, 7, 10],
+      [4, 4, 5, 6, 7, 8, 9],
+    ];
+    const lanes = [0, 1, 2].map((i) => {
+      const c = state.competitors[i];
+      return {
+        title: c?.name || (i === 0 ? "Add a store" : "Open slot"),
+        meta: c
+          ? `Next ${formatWhen(c.nextScrapeAt)}`
+          : "No competitor yet",
+        live: Boolean(c?.enabled),
+        spark: laneSparks[i],
+        stroke: ["#2B59FF", "#1A3FD9", "#60A5FA"][i],
+      };
+    });
+
+    const planName = planDisplayName();
+    const cUsed = state.planUsage?.competitors?.used ?? state.competitors.length;
+    const cLimit = state.planUsage?.competitors?.limit;
+    const sUsed = state.planUsage?.scrapeNow?.used ?? 0;
+    const sLimit =
+      state.planUsage?.scrapeNow?.limit ?? planLimitsFor().scrapeNow;
+    const scrapePct = sLimit
+      ? Math.min(100, Math.round((sUsed / sLimit) * 100))
+      : 0;
+    const slotLabel =
+      cLimit == null ? `${cUsed} stores · Unlimited` : `${cUsed} / ${cLimit} stores`;
+
     return `
-      <section class="stat-grid">
-        <article class="stat-card"><p class="stat-label">Total Competitors</p><p class="stat-value">${state.competitors.length}</p><span class="stat-trend flat">Tracked stores</span></article>
-        <article class="stat-card"><p class="stat-label">Active Competitors</p><p class="stat-value">${s.active}</p><span class="stat-trend up">Enabled monitors</span></article>
-        <article class="stat-card"><p class="stat-label">New Products</p><p class="stat-value">${state.products.length}</p><span class="stat-trend flat">Unseen cards</span></article>
-        <article class="stat-card"><p class="stat-label">Scrape Success</p><p class="stat-value">${s.successRate}%</p><span class="stat-trend ${s.errorRuns ? "down" : "up"}">${s.successRuns}/${state.runs.length || 0} recent runs</span></article>
-        <article class="stat-card"><p class="stat-label">URLs Found</p><p class="stat-value">${s.urlsFoundTotal.toLocaleString()}</p><span class="stat-trend flat">${s.newCountTotal} newly detected</span></article>
-      </section>
-      <div class="content-grid">
-        <section class="panel-card">
-          <div class="panel-head">
-            <h2 class="section-title">Competitors</h2>
-            <button type="button" class="btn ghost" id="scrape-all" ${
-              state.scraping || !state.competitors.length ? "disabled" : ""
-            }>${state.scraping ? "Scraping…" : "Scrape all"}</button>
+      <div class="dash-layout dash-v2">
+        <section class="welcome-banner welcome-banner-v2">
+          <div class="welcome-copy">
+            <p class="welcome-kicker">Competitor monitor</p>
+            <h2>Welcome back, ${escapeHtml(firstName)}! 👋</h2>
+            <p>Catch new rival products early, scrape on demand, and keep Permanent SEO ahead of every catalog shift.</p>
+            <div class="welcome-actions">
+              <button type="button" class="btn primary" data-dash-action="new-competitor">Add competitor</button>
+              <button type="button" class="btn ghost" data-dash-action="products">Review products</button>
+            </div>
           </div>
-          ${competitorListHtml()}
+          <div class="welcome-visual" aria-hidden="true">
+            <img src="/brand/icon.jpg" alt="" width="88" height="88" />
+            <span class="welcome-visual-glow"></span>
+          </div>
         </section>
-        <section class="panel-card">${productFeedHtml()}</section>
+
+        <section class="lane-grid" aria-label="Store lanes">
+          ${lanes
+            .map(
+              (lane) => `
+            <article class="lane-card">
+              <div class="lane-card-top">
+                <div>
+                  <strong>${escapeHtml(lane.title)}</strong>
+                  <p class="muted">${escapeHtml(lane.meta)}</p>
+                </div>
+                <span class="lane-status ${lane.live ? "is-live" : "is-idle"}">
+                  ${lane.live ? "● Live" : "○ Idle"}
+                </span>
+              </div>
+              <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden>
+                <path d="${sparklinePath(lane.spark, 140, 40)}" fill="none" stroke="${lane.stroke}" stroke-width="2.5" stroke-linecap="round" />
+              </svg>
+            </article>
+          `,
+            )
+            .join("")}
+        </section>
+
+        <section class="analytics-strip" aria-label="Analytics overview">
+          <div class="analytics-item">
+            <span class="analytics-icon" aria-hidden>🏪</span>
+            <div>
+              <p class="analytics-label">Competitors</p>
+              <strong>${state.competitors.length}</strong>
+              <span class="metric-delta up">${s.active} active</span>
+            </div>
+          </div>
+          <div class="analytics-item">
+            <span class="analytics-icon" aria-hidden>🆕</span>
+            <div>
+              <p class="analytics-label">New products</p>
+              <strong>${state.products.length}</strong>
+              <span class="metric-delta flat">Current view</span>
+            </div>
+          </div>
+          <div class="analytics-item">
+            <span class="analytics-icon" aria-hidden>✓</span>
+            <div>
+              <p class="analytics-label">Success rate</p>
+              <strong>${s.successRate}%</strong>
+              <span class="metric-delta ${s.errorRuns ? "down" : "up"}">${s.successRuns}/${state.runs.length || 0} runs</span>
+            </div>
+          </div>
+          <div class="analytics-item">
+            <span class="analytics-icon" aria-hidden>🔗</span>
+            <div>
+              <p class="analytics-label">URLs found</p>
+              <strong>${s.urlsFoundTotal.toLocaleString()}</strong>
+              <span class="metric-delta flat">${s.newCountTotal} new hits</span>
+            </div>
+          </div>
+          <div class="analytics-item">
+            <span class="analytics-icon" aria-hidden>⚠</span>
+            <div>
+              <p class="analytics-label">Errors</p>
+              <strong>${s.errorRuns}</strong>
+              <span class="metric-delta ${s.errorRuns ? "down" : "up"}">${s.errorRuns ? "Needs attention" : "All clear"}</span>
+            </div>
+          </div>
+        </section>
+
+        <div class="dash-main-grid">
+          <div class="dash-main-left">
+            <article class="chart-card chart-card-wide">
+              <div class="panel-head">
+                <div>
+                  <h3>Real-time scrape activity</h3>
+                  <p class="panel-sub">New finds weighted by recent run volume</p>
+                </div>
+              </div>
+              ${areaChartSvg(runPoints)}
+            </article>
+            <article class="chart-card">
+              <div class="panel-head">
+                <div>
+                  <h3>Pipeline mix</h3>
+                  <p class="panel-sub">Where products sit right now</p>
+                </div>
+              </div>
+              <div class="pipeline-row">
+                ${donutSvg(donutParts)}
+                <ul class="legend-list">
+                  ${donutParts
+                    .map(
+                      (p) => `
+                    <li>
+                      <span><span class="legend-swatch" style="background:${p.color}"></span>${escapeHtml(p.label)}</span>
+                      <strong>${p.value}</strong>
+                    </li>
+                  `,
+                    )
+                    .join("")}
+                </ul>
+              </div>
+            </article>
+          </div>
+
+          <aside class="dash-main-right">
+            <article class="chart-card quick-panel">
+              <h3>Quick actions</h3>
+              <p class="panel-sub">Jump into the workflows you use most</p>
+              <div class="quick-actions quick-actions-grid">
+                <button type="button" class="quick-action" data-dash-action="new-competitor">
+                  <span class="quick-ico" aria-hidden>＋</span>
+                  <strong>New competitor</strong>
+                </button>
+                <button type="button" class="quick-action" data-dash-action="scrape">
+                  <span class="quick-ico" aria-hidden>⟳</span>
+                  <strong>Scrape all</strong>
+                </button>
+                <button type="button" class="quick-action" data-dash-action="products">
+                  <span class="quick-ico" aria-hidden>▣</span>
+                  <strong>Product inbox</strong>
+                </button>
+                <button type="button" class="quick-action" data-dash-action="runs">
+                  <span class="quick-ico" aria-hidden>▤</span>
+                  <strong>Scrape runs</strong>
+                </button>
+                <button type="button" class="quick-action" data-dash-action="settings">
+                  <span class="quick-ico" aria-hidden>⚙</span>
+                  <strong>Settings</strong>
+                </button>
+                <button type="button" class="quick-action" data-dash-action="pricing">
+                  <span class="quick-ico" aria-hidden>◆</span>
+                  <strong>Upgrade</strong>
+                </button>
+              </div>
+            </article>
+
+            <article class="plan-card">
+              <div class="plan-card-head">
+                <div>
+                  <p class="plan-card-label">Current plan</p>
+                  <h3>${escapeHtml(planName)} <span class="plan-active-pill">Active</span></h3>
+                </div>
+              </div>
+              <p class="plan-card-meta">${escapeHtml(slotLabel)}</p>
+              <p class="plan-card-meta">Scrape now ${escapeHtml(String(sUsed))} / ${escapeHtml(String(sLimit))} this month</p>
+              <div class="plan-progress" role="progressbar" aria-valuenow="${scrapePct}" aria-valuemin="0" aria-valuemax="100">
+                <span style="width:${scrapePct}%"></span>
+              </div>
+              <button type="button" class="btn plan-manage-btn" data-dash-action="pricing">Manage subscription</button>
+            </article>
+          </aside>
+        </div>
       </div>
     `;
   }
 
   function renderCompetitors() {
-    return `
-      <div class="stack">
-        <section class="panel-card">
+    const slotsLeft = competitorSlotsLeft();
+    const scrapeLeft = scrapeNowLeft();
+    const addBlocked = !canAddCompetitor();
+    const addSection = state.showAddForm
+      ? `
+        <section class="panel-card" id="add-competitor-panel">
           <div class="panel-head">
             <div>
               <h2 class="section-title">Add competitor</h2>
               <p class="panel-sub">Baselines on first scrape · sitemap only</p>
             </div>
-            <button type="button" class="btn ghost" id="scrape-all" ${
-              state.scraping || !state.competitors.length ? "disabled" : ""
-            }>${state.scraping ? "Scraping…" : "Scrape all now"}</button>
+            <button type="button" class="btn ghost" id="btn-cancel-add">Cancel</button>
           </div>
+          ${planUsageSummaryHtml()}
+          ${
+            addBlocked
+              ? `<p class="plan-limit-banner" role="status">Competitor limit reached on your plan. <button type="button" class="linkish" data-open-pricing>Upgrade</button> to add more stores.</p>`
+              : `<p class="muted plan-limit-hint">${
+                  Number.isFinite(slotsLeft)
+                    ? `${slotsLeft} competitor slot${slotsLeft === 1 ? "" : "s"} left`
+                    : "Unlimited competitor slots"
+                } · ${scrapeLeft} Scrape now left this month</p>`
+          }
           <form class="add-form" id="add-form">
-            <label>Name<input name="name" value="${escapeHtml(state.form.name)}" placeholder="Acme Store" required /></label>
-            <label>Store or sitemap URL<input name="sitemapUrl" value="${escapeHtml(state.form.sitemapUrl)}" placeholder="https://example.com or /sitemap.xml" required /></label>
-            <label>Interval<select name="intervalHours">${intervalOptionsHtml(state.form.intervalHours)}</select></label>
-            <button type="submit" class="btn primary" ${state.saving ? "disabled" : ""}>${
-              state.saving ? "Adding…" : "Add & baseline"
+            <label>Name<input name="name" value="${escapeHtml(state.form.name)}" placeholder="Acme Store" required ${addBlocked ? "disabled" : ""} /></label>
+            <label>Store or sitemap URL<input name="sitemapUrl" value="${escapeHtml(state.form.sitemapUrl)}" placeholder="https://example.com or /sitemap.xml" required ${addBlocked ? "disabled" : ""} /></label>
+            <label>Interval<select name="intervalHours" ${addBlocked ? "disabled" : ""}>${intervalOptionsHtml(state.form.intervalHours)}</select></label>
+            <button type="submit" class="btn primary" ${state.saving || addBlocked ? "disabled" : ""}>${
+              state.saving ? "Adding…" : addBlocked ? "Limit reached" : "Add & baseline"
             }</button>
           </form>
         </section>
+      `
+      : "";
+
+    return `
+      <div class="stack">
+        ${addSection}
         <section class="panel-card">
-          <h2 class="section-title">Monitored stores</h2>
-          <p class="panel-sub">${state.competitors.length} competitors · pause/remove anytime</p>
+          <div class="panel-head">
+            <div>
+              <h2 class="section-title">Monitored stores</h2>
+              <p class="panel-sub">${competitorsInRange().length} of ${state.competitors.length} competitors in range</p>
+            </div>
+            ${planUsageSummaryHtml()}
+            ${competitorRangeSelectHtml()}
+          </div>
           ${competitorListHtml()}
         </section>
       </div>
@@ -368,50 +918,883 @@
 
   function renderSettings() {
     const on = state.settings.dailyCronEnabled !== false;
+    const brandName = state.settings.brandName || "Permanent SEO";
+    const brandTagline = state.settings.brandTagline || "Competitor intel";
+    const accentColor = state.settings.accentColor || "#2B59FF";
+    const currentEmoji = sanitizeAvatarEmoji(
+      state.user.avatarEmoji,
+      state.user.role,
+    );
+    const emojis = state.avatarEmojis?.length
+      ? state.avatarEmojis
+      : ["👔", "🧑‍💼", "👨‍💻", "👩‍💻", "🧑‍🔬", "📊", "🎯", "🚀", "⭐", "💼"];
+
+    const profiles = state.profiles.length
+      ? state.profiles
+          .map(
+            (p) => `
+          <article class="competitor-row profile-row-card" data-profile-id="${escapeHtml(p.id)}">
+            <div class="profile-row-identity">
+              ${
+                p.avatarImage
+                  ? `<span class="avatar has-image" aria-hidden><img src="${escapeHtml(p.avatarImage)}" alt="" /></span>`
+                  : `<span class="avatar is-emoji" aria-hidden>${escapeHtml(sanitizeAvatarEmoji(p.avatarEmoji, p.role))}</span>`
+              }
+              <div>
+                <strong>${escapeHtml(p.displayName || p.username)}</strong>
+                <p class="muted">@${escapeHtml(p.username)} · ${escapeHtml(formatRoleLabel(p.role))} · updated ${escapeHtml(formatWhen(p.updatedAt))}</p>
+              </div>
+            </div>
+            <div class="profile-row-actions">
+              <button type="button" class="btn ghost" data-profile-action="edit">Edit</button>
+              <button type="button" class="btn danger-outline" data-profile-action="delete" ${
+                state.profiles.length <= 1 ? "disabled" : ""
+              }>Remove</button>
+            </div>
+          </article>
+        `,
+          )
+          .join("")
+      : `<p class="muted">No login profiles yet. The default Admin account is created on first use.</p>`;
+
     return `
-      <section class="panel-card">
-        <h2 class="section-title">Workspace</h2>
-        <p class="panel-sub">
-          Scrapes run when you click Scrape, when a store is first added (baseline),
-          and — if enabled below — once daily at 9:00 AM Pakistan time. The dashboard
-          does not poll or scrape while it is open.
-        </p>
-        <div class="competitor-list">
-          <article class="competitor-row">
-            <div>
-              <strong>Daily 9am scrape</strong>
-              <p class="muted">09:00 Asia/Karachi via Hostinger cron hitting /api/cron. Manual scrape still works when off.</p>
+      <div class="stack settings-stack">
+        <section class="panel-card">
+          <h2 class="section-title">Your avatar</h2>
+          <p class="panel-sub">Pick a professional emoji or upload a profile image for the sidebar and top bar.</p>
+          <div class="avatar-settings">
+            <div class="avatar-preview-wrap">
+              ${avatarMarkup("avatar-preview")}
+              <div>
+                <strong>${escapeHtml(state.user.displayName || state.user.username || "You")}</strong>
+                <p class="muted">${escapeHtml(formatRoleLabel(state.user.role))}</p>
+              </div>
             </div>
-            <div class="schedule-controls">
-              <span class="status-pill${on ? "" : " paused"}">${on ? "ON" : "OFF"}</span>
-              <button type="button" class="switch${on ? " on" : ""}" role="switch" aria-checked="${on}" id="daily-cron-toggle" ${
-                state.savingSchedule ? "disabled" : ""
-              }></button>
+            <div class="emoji-picker" role="listbox" aria-label="Avatar emoji">
+              ${emojis
+                .map(
+                  (emo) => `
+                <button
+                  type="button"
+                  class="emoji-option${emo === currentEmoji && !state.user.avatarImage ? " active" : ""}"
+                  data-avatar-emoji="${escapeHtml(emo)}"
+                  aria-label="Use ${escapeHtml(emo)} avatar"
+                >${escapeHtml(emo)}</button>
+              `,
+                )
+                .join("")}
             </div>
-          </article>
-          <article class="competitor-row">
-            <div>
-              <strong>Session auth</strong>
-              <p class="muted">Sign out from the sidebar profile row when finished.</p>
+            <div class="avatar-upload-row">
+              <label class="btn ghost avatar-upload-btn">
+                Upload image
+                <input id="avatar-file-input" type="file" accept="image/png,image/jpeg,image/webp" hidden />
+              </label>
+              ${
+                state.user.avatarImage
+                  ? `<button type="button" class="btn danger-outline" id="avatar-clear-image">Remove photo</button>`
+                  : ""
+              }
             </div>
-          </article>
+            <p class="muted avatar-hint">PNG, JPG, or WebP · max about 150KB</p>
+          </div>
+        </section>
+
+        <section class="panel-card">
+          <h2 class="section-title">Login profiles</h2>
+          <p class="panel-sub">Accounts that can sign in to this dashboard. Passwords are stored hashed.</p>
+          <div class="competitor-list">${profiles}</div>
+          <form class="add-form settings-form" id="profile-form">
+            <label>Display name<input name="displayName" placeholder="Operations lead" /></label>
+            <label>Username<input name="username" placeholder="ops" required minlength="2" /></label>
+            <label>Password<input name="password" type="password" placeholder="At least 6 characters" required minlength="6" /></label>
+            <label>Role
+              <select name="role">
+                <option value="seo-analystic">SEO Analytic</option>
+                <option value="admin">Admin</option>
+                <option value="owner">Owner</option>
+              </select>
+            </label>
+            <button type="submit" class="btn primary" ${state.savingProfile ? "disabled" : ""}>${
+              state.savingProfile ? "Saving…" : "Add profile"
+            }</button>
+          </form>
+        </section>
+
+        <section class="panel-card">
+          <h2 class="section-title">Customization</h2>
+          <p class="panel-sub">Accent color used across primary actions. Sidebar title follows the signed-in role.</p>
+          <form class="add-form settings-form" id="customization-form">
+            <label>Workspace label<input name="brandName" value="${escapeHtml(brandName)}" required maxlength="40" /></label>
+            <label>Tagline<input name="brandTagline" value="${escapeHtml(brandTagline)}" required maxlength="80" /></label>
+            <label>Accent color<input name="accentColor" type="color" value="${escapeHtml(accentColor)}" /></label>
+            <button type="submit" class="btn primary" ${state.savingCustomization ? "disabled" : ""}>${
+              state.savingCustomization ? "Saving…" : "Save customization"
+            }</button>
+          </form>
+        </section>
+
+        <section class="panel-card">
+          <h2 class="section-title">Schedule</h2>
+          <p class="panel-sub">
+            Scrapes run when you click Scrape, when a store is first added (baseline),
+            and — if enabled below — once daily at 8:00 AM Pakistan time. The dashboard
+            does not poll or scrape while it is open.
+          </p>
+          <div class="competitor-list">
+            <article class="competitor-row">
+              <div>
+                <strong>Daily 8am scrape</strong>
+                <p class="muted">08:00 Asia/Karachi via Hostinger cron hitting /api/cron (03:00 UTC). Manual scrape still works when off.</p>
+              </div>
+              <div class="schedule-controls">
+                <span class="status-pill${on ? "" : " paused"}">${on ? "ON" : "OFF"}</span>
+                <button type="button" class="switch${on ? " on" : ""}" role="switch" aria-checked="${on}" id="daily-cron-toggle" ${
+                  state.savingSchedule ? "disabled" : ""
+                }></button>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+    `;
+  }
+
+  function renderHelp() {
+    const option = state.helpOption || "ticket";
+    const tabs = [
+      { id: "ticket", label: "Ticket" },
+      { id: "whatsapp", label: "WhatsApp support" },
+      { id: "email", label: "Email support" },
+    ]
+      .map(
+        (t) => `
+        <button type="button" class="help-option-tab${
+          option === t.id ? " active" : ""
+        }" data-help-option="${t.id}" role="tab" aria-selected="${
+          option === t.id ? "true" : "false"
+        }">${escapeHtml(t.label)}</button>
+      `,
+      )
+      .join("");
+
+    let panel = "";
+    if (option === "whatsapp") {
+      panel = `
+        <section class="panel-card help-panel">
+          <h2 class="section-title">WhatsApp support</h2>
+          <p class="panel-sub">Message the team directly on WhatsApp for quick help.</p>
+          <p class="help-contact-value">${escapeHtml(HELP_WHATSAPP)}</p>
+          <a class="btn primary" href="${HELP_WHATSAPP_LINK}" target="_blank" rel="noopener noreferrer">
+            Open WhatsApp chat
+          </a>
+        </section>
+      `;
+    } else if (option === "email") {
+      panel = `
+        <section class="panel-card help-panel">
+          <h2 class="section-title">Email support</h2>
+          <p class="panel-sub">Send us an email and we will get back to you.</p>
+          <p class="help-contact-value">${escapeHtml(HELP_EMAIL)}</p>
+          <a class="btn primary" href="mailto:${escapeHtml(HELP_EMAIL)}?subject=${encodeURIComponent("Competitor Monitor support")}">
+            Compose email
+          </a>
+        </section>
+      `;
+    } else {
+      panel = `
+        <section class="panel-card help-panel">
+          <h2 class="section-title">Support ticket</h2>
+          <p class="panel-sub">Describe the issue and we will open it with the support team.</p>
+          <form class="add-form settings-form" id="help-ticket-form">
+            <label>Subject
+              <input name="subject" required maxlength="120" placeholder="Brief summary" />
+            </label>
+            <label>Message
+              <textarea name="message" required rows="6" maxlength="2000" placeholder="What happened, and what did you expect?"></textarea>
+            </label>
+            <button type="submit" class="btn primary">Submit ticket</button>
+          </form>
+        </section>
+      `;
+    }
+
+    return `
+      <div class="stack help-stack">
+        <div class="help-brand-bar">
+          <p class="panel-sub">We’re here when you need a hand with monitoring.</p>
+        </div>
+        <div class="help-option-tabs" role="tablist" aria-label="Help Centre options">
+          ${tabs}
+        </div>
+        ${panel}
+      </div>
+    `;
+  }
+
+  function normalizeRole(role) {
+    const value = String(role || "")
+      .trim()
+      .toLowerCase();
+    if (value === "operator") return "seo-analystic";
+    if (value === "owner" || value === "admin" || value === "seo-analystic") {
+      return value;
+    }
+    return "seo-analystic";
+  }
+
+  function formatRoleLabel(role) {
+    const map = {
+      owner: "Owner",
+      admin: "Admin",
+      "seo-analystic": "SEO Analytic",
+    };
+    return map[normalizeRole(role)] || "SEO Analytic";
+  }
+
+  function isAdmin() {
+    const role = normalizeRole(state.user?.role);
+    return role === "owner" || role === "admin";
+  }
+
+  function money(value) {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return "$0";
+    return n % 1 === 0 ? `$${n}` : `$${n.toFixed(2)}`;
+  }
+
+  function yearlyMonthly(monthly) {
+    return Math.round(monthly * (1 - state.yearlyDiscount) * 100) / 100;
+  }
+
+  function displayPrice(monthly) {
+    return state.billingCycle === "yearly" ? yearlyMonthly(monthly) : monthly;
+  }
+
+  function pricePeriodLabel() {
+    return state.billingCycle === "yearly" ? "/mo · billed yearly" : "/month";
+  }
+
+  function formatCountdown(ms) {
+    if (ms <= 0) return { d: "00", h: "00", m: "00", s: "00", expired: true };
+    const total = Math.floor(ms / 1000);
+    const d = Math.floor(total / 86400);
+    const h = Math.floor((total % 86400) / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return { d: pad(d), h: pad(h), m: pad(m), s: pad(s), expired: false };
+  }
+
+  function syncPricingTimer() {
+    const rootTimer = document.getElementById("pricing-timer");
+    if (!rootTimer) return;
+    const ends = state.settings.pricingOfferEndsAt
+      ? Date.parse(state.settings.pricingOfferEndsAt)
+      : NaN;
+    const parts = formatCountdown(Number.isFinite(ends) ? ends - Date.now() : 0);
+    rootTimer.querySelector('[data-unit="d"]').textContent = parts.d;
+    rootTimer.querySelector('[data-unit="h"]').textContent = parts.h;
+    rootTimer.querySelector('[data-unit="m"]').textContent = parts.m;
+    rootTimer.querySelector('[data-unit="s"]').textContent = parts.s;
+    rootTimer.classList.toggle("is-expired", parts.expired);
+    const label = document.getElementById("pricing-timer-label");
+    if (label) {
+      label.textContent = parts.expired
+        ? "Launch offer ended"
+        : "Launch offer ends in";
+    }
+  }
+
+  function startPricingTimer() {
+    if (state.pricingTimerId) {
+      clearInterval(state.pricingTimerId);
+      state.pricingTimerId = null;
+    }
+    if (state.nav !== "pricing" || !isAdmin()) return;
+    syncPricingTimer();
+    state.pricingTimerId = setInterval(syncPricingTimer, 1000);
+  }
+
+  function isBasicPlan() {
+    return (state.settings.subscriptionPlan || "basic") === "basic";
+  }
+
+  function currentPlanId() {
+    return state.settings.subscriptionPlan || "basic";
+  }
+
+  function planLimitsFor(plan) {
+    const key = plan || currentPlanId();
+    return FALLBACK_PLAN_LIMITS[key] || FALLBACK_PLAN_LIMITS.basic;
+  }
+
+  function applyPlanUsage(usage) {
+    if (!usage || typeof usage !== "object") return;
+    state.planUsage = usage;
+  }
+
+  function competitorSlotsLeft() {
+    const usage = state.planUsage?.competitors;
+    if (usage) {
+      if (usage.unlimited) return Infinity;
+      return Number(usage.remaining ?? 0);
+    }
+    const limit = planLimitsFor().competitors;
+    if (limit == null) return Infinity;
+    return Math.max(0, limit - state.competitors.length);
+  }
+
+  function canAddCompetitor() {
+    return competitorSlotsLeft() > 0;
+  }
+
+  function scrapeNowLeft() {
+    const usage = state.planUsage?.scrapeNow;
+    if (usage) return Number(usage.remaining ?? 0);
+    const limit = planLimitsFor().scrapeNow;
+    const used = Number(state.settings.manualScrapeUsed || 0);
+    return Math.max(0, limit - used);
+  }
+
+  function canScrapeNow() {
+    return scrapeNowLeft() > 0;
+  }
+
+  function planUsageSummaryHtml() {
+    const cLimit = state.planUsage?.competitors?.limit ?? planLimitsFor().competitors;
+    const cUsed = state.planUsage?.competitors?.used ?? state.competitors.length;
+    const sLimit = state.planUsage?.scrapeNow?.limit ?? planLimitsFor().scrapeNow;
+    const sUsed = state.planUsage?.scrapeNow?.used ?? Number(state.settings.manualScrapeUsed || 0);
+    const cLabel = cLimit == null ? `${cUsed} / Unlimited` : `${cUsed} / ${cLimit}`;
+    return `
+      <p class="plan-usage-chip" title="Resets each calendar month (UTC)">
+        <span><strong>Competitors</strong> ${escapeHtml(cLabel)}</span>
+        <span><strong>Scrape now</strong> ${escapeHtml(String(sUsed))} / ${escapeHtml(String(sLimit))}</span>
+      </p>
+    `;
+  }
+
+  function promptPlanUpgrade(message) {
+    setError(message);
+    showUpgradeToast(message);
+  }
+
+  function isUpgradeSnoozed() {
+    try {
+      const until = Number(localStorage.getItem(UPGRADE_SNOOZE_KEY) || 0);
+      return Number.isFinite(until) && until > Date.now();
+    } catch {
+      return false;
+    }
+  }
+
+  function snoozeUpgradeReminders() {
+    try {
+      localStorage.setItem(UPGRADE_SNOOZE_KEY, String(Date.now() + UPGRADE_SNOOZE_MS));
+    } catch {
+      /* ignore */
+    }
+    state.bannerSnoozed = true;
+  }
+
+  function clearUpgradeSnooze() {
+    try {
+      localStorage.removeItem(UPGRADE_SNOOZE_KEY);
+    } catch {
+      /* ignore */
+    }
+    state.bannerSnoozed = false;
+  }
+
+  function goToPricing() {
+    state.nav = "pricing";
+    render();
+    void loadPricing().then(() => render());
+  }
+
+  function showUpgradeToast(message) {
+    if (!upgradeToast) return;
+    upgradeToast.hidden = false;
+    upgradeToast.innerHTML = `
+      <div class="upgrade-toast-inner">
+        <p>${escapeHtml(message)}</p>
+        <button type="button" class="btn primary" id="toast-upgrade-cta">View plans</button>
+        <button type="button" class="upgrade-toast-dismiss" id="toast-upgrade-dismiss" aria-label="Dismiss">×</button>
+      </div>
+    `;
+    document.getElementById("toast-upgrade-cta")?.addEventListener("click", () => {
+      upgradeToast.hidden = true;
+      goToPricing();
+    });
+    document.getElementById("toast-upgrade-dismiss")?.addEventListener("click", () => {
+      upgradeToast.hidden = true;
+      snoozeUpgradeReminders();
+      renderUpgradeNag();
+    });
+  }
+
+  function maybeNagOnNav() {
+    if (!isBasicPlan()) {
+      if (upgradeToast) upgradeToast.hidden = true;
+      return;
+    }
+    state.nagNavCount += 1;
+    if (state.nagNavCount % 4 === 0 && !isUpgradeSnoozed()) {
+      showUpgradeToast(
+        "Still on Basic? Essential unlocks 4 stores and 8 Scrape now runs per month.",
+      );
+    }
+  }
+
+  function discountPercent(list, sale) {
+    if (!list || list <= sale) return 0;
+    return Math.round(((list - sale) / list) * 100);
+  }
+
+  function planSalePrice(monthly) {
+    return displayPrice(monthly);
+  }
+
+  function planListPrice(listMonthly, monthly) {
+    return Number(listMonthly || monthly);
+  }
+
+  function featureCell(value) {
+    if (value === true) {
+      return `<span class="pricing-check" aria-label="Included">✓</span>`;
+    }
+    if (value === false || value == null) {
+      return `<span class="pricing-dash" aria-label="Not included">–</span>`;
+    }
+    return `<strong class="pricing-feature-value">${escapeHtml(String(value))}</strong>`;
+  }
+
+  function renderFeatureSections(planId) {
+    const sections = state.featureSections?.length
+      ? state.featureSections
+      : DEFAULT_FEATURE_SECTIONS;
+    return sections
+      .map((section) => {
+        const rows = (section.rows || [])
+          .map((row) => {
+            const value = row[planId];
+            const detail =
+              typeof value === "string" || typeof value === "number"
+                ? ` <strong>${escapeHtml(String(value))}</strong>`
+                : "";
+            return `
+              <li>
+                ${featureCell(typeof value === "boolean" ? value : true)}
+                <span>${escapeHtml(row.label)}${typeof value === "boolean" ? "" : detail}</span>
+              </li>
+            `;
+          })
+          .join("");
+        return `
+          <div class="pricing-feature-block">
+            <p class="pricing-feature-heading">${escapeHtml(section.title)}</p>
+            <ul class="pricing-features">${rows}</ul>
+          </div>
+        `;
+      })
+      .join("");
+  }
+
+  function renderPricingCard(plan) {
+    const basic = plan.id === "basic";
+    const current = (state.settings.subscriptionPlan || "basic") === plan.id;
+    const selectedTier = basic
+      ? plan.tiers?.find((t) => t.id === state.basicTierId) || plan.tiers?.[0]
+      : null;
+    const monthly = basic ? selectedTier?.monthly ?? 6 : plan.monthly;
+    const listMonthly = basic
+      ? selectedTier?.listMonthly ?? monthly
+      : plan.listMonthly ?? monthly;
+    const list = planListPrice(listMonthly, monthly);
+    const yearlySale = yearlyMonthly(monthly);
+    const showStrike =
+      state.billingCycle === "yearly" ? list > yearlySale : list > monthly;
+    const shownSale = state.billingCycle === "yearly" ? yearlySale : monthly;
+    const shownList = list;
+    const badgeOff =
+      state.billingCycle === "yearly"
+        ? Math.max(
+            discountPercent(list, yearlySale),
+            Math.round(state.yearlyDiscount * 100),
+          )
+        : discountPercent(list, monthly);
+
+    const renewNote =
+      state.billingCycle === "yearly"
+        ? `Get 12 months for <strong>${money(yearlySale * 12)}</strong> (regular ${money(list * 12)}). Renews at ${money(monthly)}/mo.`
+        : `Billed monthly. Renews at ${money(monthly)}/mo. Cancel anytime.`;
+
+    const tierSlider = basic
+      ? `
+        <div class="pricing-customize">
+          <p class="pricing-customize-label">Customize scrape interval</p>
+          <input
+            type="range"
+            class="pricing-tier-range"
+            id="basic-tier-range"
+            min="0"
+            max="${(plan.tiers || []).length - 1}"
+            step="1"
+            value="${Math.max(
+              0,
+              (plan.tiers || []).findIndex((t) => t.id === (selectedTier?.id || state.basicTierId)),
+            )}"
+            aria-label="Basic scrape interval"
+          />
+          <div class="pricing-tier-labels">
+            ${(plan.tiers || [])
+              .map(
+                (t) => `
+              <button type="button" class="pricing-tier-label${
+                t.id === (selectedTier?.id || state.basicTierId) ? " active" : ""
+              }" data-basic-tier="${escapeHtml(t.id)}">${t.intervalHours}h</button>
+            `,
+              )
+              .join("")}
+          </div>
+        </div>
+      `
+      : "";
+
+    const featured = plan.highlight;
+    const badge = featured
+      ? `<span class="pricing-special-badge">Special offer${
+          badgeOff ? ` · ${badgeOff}% off` : ""
+        }</span>`
+      : badgeOff
+        ? `<span class="pricing-off-badge">${badgeOff}% off</span>`
+        : "";
+
+    const ctaLabel = current
+      ? "Current plan"
+      : plan.id === "basic"
+        ? "Choose plan"
+        : "Upgrade";
+
+    return `
+      <article class="pricing-card${featured ? " is-featured" : ""}${
+        current ? " is-current" : ""
+      }">
+        ${badge}
+        <div class="pricing-card-top">
+          <h3 class="pricing-plan-name">${escapeHtml(plan.name)}</h3>
+          <p class="pricing-plan-blurb">${escapeHtml(plan.blurb)}</p>
+          <p class="pricing-plan-limits muted">
+            ${
+              plan.competitors == null
+                ? "Unlimited competitors"
+                : `${escapeHtml(String(plan.competitors))} competitors`
+            }
+            · ${escapeHtml(String(plan.scrapeNow ?? planLimitsFor(plan.id).scrapeNow))} Scrape now / mo
+          </p>
+          <div class="pricing-price-block">
+            ${
+              showStrike
+                ? `<p class="pricing-was">${money(shownList)}</p>`
+                : ""
+            }
+            <p class="pricing-amount">
+              <span>${money(shownSale)}</span><small>/mo</small>
+            </p>
+          </div>
+          <button
+            type="button"
+            class="btn pricing-cta${featured ? " primary" : " pricing-cta-outline"}"
+            data-choose-plan="${escapeHtml(plan.id)}"
+            ${current || state.choosingPlan ? "disabled" : ""}
+          >${state.choosingPlan ? "Saving…" : ctaLabel}</button>
+          <p class="pricing-renew">${renewNote}</p>
+          ${tierSlider}
+        </div>
+        ${renderFeatureSections(plan.id)}
+        ${
+          plan.why
+            ? `<div class="pricing-why"><strong>Why this plan?</strong><p>${escapeHtml(plan.why)}</p></div>`
+            : ""
+        }
+      </article>
+    `;
+  }
+
+  function renderCompareTable() {
+    const plans = state.pricingPlans || [];
+    if (!plans.length) return "";
+    const sections = state.featureSections?.length
+      ? state.featureSections
+      : DEFAULT_FEATURE_SECTIONS;
+    const rows = sections
+      .flatMap((section) =>
+        (section.rows || []).map(
+          (row) => `
+            <tr>
+              <th scope="row">${escapeHtml(row.label)}</th>
+              ${plans
+                .map((plan) => `<td>${featureCell(row[plan.id])}</td>`)
+                .join("")}
+            </tr>
+          `,
+        ),
+      )
+      .join("");
+
+    return `
+      <section class="pricing-compare" id="compare-table">
+        <div class="pricing-compare-head">
+          <h3>Compare our plans</h3>
+          <p>See at a glance what each plan costs and what you get.</p>
+        </div>
+        <div class="pricing-compare-scroll">
+          <table class="pricing-compare-table">
+            <thead>
+              <tr>
+                <th scope="col">Top features</th>
+                ${plans.map((p) => `<th scope="col">${escapeHtml(p.name)}</th>`).join("")}
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
         </div>
       </section>
     `;
   }
 
+  function renderPricingFaqs() {
+    const faqs = state.pricingFaqs?.length
+      ? state.pricingFaqs
+      : [
+          {
+            q: "Can I change my plan later?",
+            a: "Yes. Upgrade from Basic anytime from this page.",
+          },
+        ];
+    return `
+      <section class="pricing-faq">
+        <h3>Pricing FAQs</h3>
+        <div class="pricing-faq-list">
+          ${faqs
+            .map(
+              (item, i) => `
+            <details class="pricing-faq-item"${i === 0 ? " open" : ""}>
+              <summary>${escapeHtml(item.q)}</summary>
+              <p>${escapeHtml(item.a)}</p>
+            </details>
+          `,
+            )
+            .join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderPricing() {
+    const plans = state.pricingPlans || [];
+    const cards = plans.map((plan) => renderPricingCard(plan)).join("");
+    const yearly = state.billingCycle === "yearly";
+    const includes = state.planIncludes?.length
+      ? state.planIncludes
+      : ["Sitemap scraping", "Product cards", "Manual runs", "Secure login"];
+    const trust = state.trustBadges?.length
+      ? state.trustBadges
+      : ["7-day launch offer", "Cancel anytime", "Upgrade in one click"];
+    const currentPlan = state.settings.subscriptionPlan || "basic";
+    const currentLabel =
+      currentPlan === "essential"
+        ? "Essential"
+        : currentPlan === "advance"
+          ? "Advance"
+          : "Basic";
+
+    return `
+      <div class="pricing-hostinger">
+        <ul class="pricing-trust" aria-label="Plan assurances">
+          ${trust.map((t) => `<li>${escapeHtml(t)}</li>`).join("")}
+        </ul>
+
+        <header class="pricing-hero">
+          <div>
+            <p class="pricing-kicker">Monitoring</p>
+            <h2 class="pricing-hero-title">Plans &amp; pricing</h2>
+            <p class="pricing-hero-sub">
+              Current plan: <strong>${escapeHtml(currentLabel)}</strong>
+              ${
+                isBasicPlan()
+                  ? ` · <span class="pricing-upgrade-hint">Upgrade to unlock more competitor slots</span>`
+                  : ""
+              }
+            </p>
+            <div class="pricing-includes">
+              <span class="pricing-includes-label">All plans include:</span>
+              <ul>
+                ${includes
+                  .map((item) => `<li><span aria-hidden>✓</span> ${escapeHtml(item)}</li>`)
+                  .join("")}
+              </ul>
+            </div>
+          </div>
+          ${
+            isAdmin()
+              ? `
+          <div class="pricing-timer-compact">
+            <p class="pricing-timer-label" id="pricing-timer-label">Launch offer ends in</p>
+            <div class="pricing-timer" id="pricing-timer" aria-live="polite">
+              <div><strong data-unit="d">00</strong><span>Days</span></div>
+              <div><strong data-unit="h">00</strong><span>Hours</span></div>
+              <div><strong data-unit="m">00</strong><span>Mins</span></div>
+              <div><strong data-unit="s">00</strong><span>Secs</span></div>
+            </div>
+            <button type="button" class="btn ghost" id="pricing-reset-timer">Reset timer</button>
+          </div>`
+              : ""
+          }
+        </header>
+
+        <div class="pricing-toolbar">
+          <div class="pricing-segment" role="group" aria-label="Billing cycle">
+            <button type="button" class="pricing-segment-btn${
+              !yearly ? " active" : ""
+            }" data-billing="monthly">Monthly</button>
+            <button type="button" class="pricing-segment-btn${
+              yearly ? " active" : ""
+            }" data-billing="yearly">Yearly · save ${Math.round(state.yearlyDiscount * 100)}%</button>
+          </div>
+          <label class="pricing-term">
+            <span class="visually-hidden">Plan term</span>
+            <select id="billing-term-select" aria-label="Plan term">
+              <option value="monthly" ${!yearly ? "selected" : ""}>1 month plan</option>
+              <option value="yearly" ${yearly ? "selected" : ""}>12 months plan · ${Math.round(state.yearlyDiscount * 100)}% off</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="pricing-grid">
+          ${cards || `<p class="muted">Loading plans…</p>`}
+        </div>
+
+        <p class="pricing-footnote">
+          All plans can be changed anytime. The monthly rate on yearly billing is the total divided by 12.
+          <a href="#compare-table">Compare plans</a>
+        </p>
+
+        ${renderCompareTable()}
+        ${renderPricingFaqs()}
+      </div>
+    `;
+  }
+
+
+  function defaultAvatarEmoji(role) {
+    const key = normalizeRole(role);
+    if (key === "owner") return "⭐";
+    if (key === "admin") return "💼";
+    return "👔";
+  }
+
+  function sanitizeAvatarEmoji(emoji, role) {
+    const value = String(emoji || "").trim();
+    // Shield emoji renders as a broken glyph on many Windows setups
+    if (!value || value === "🛡️" || value === "🛡" || value === "\uFFFD") {
+      return defaultAvatarEmoji(role);
+    }
+    return value;
+  }
+
+  function avatarMarkup(extraClass = "") {
+    const img = state.user?.avatarImage;
+    const emoji = sanitizeAvatarEmoji(
+      state.user?.avatarEmoji,
+      state.user?.role,
+    );
+    const cls = ["avatar", extraClass].filter(Boolean).join(" ");
+    if (img) {
+      return `<span class="${cls} has-image" aria-hidden><img src="${escapeHtml(img)}" alt="" /></span>`;
+    }
+    return `<span class="${cls} is-emoji" aria-hidden>${escapeHtml(emoji)}</span>`;
+  }
+
+  function applyAvatarElements() {
+    const initials = userInitials();
+    const img = state.user?.avatarImage || "";
+    const paint = (el, preferInitials) => {
+      if (!el) return;
+      el.classList.add("avatar");
+      el.classList.toggle("has-image", Boolean(img));
+      el.classList.toggle("is-emoji", false);
+      el.classList.toggle("is-initials", !img);
+      if (img) {
+        el.innerHTML = `<img src="${escapeHtml(img)}" alt="" />`;
+        const image = el.querySelector("img");
+        if (image) {
+          image.addEventListener(
+            "error",
+            () => {
+              el.classList.remove("has-image");
+              el.classList.add("is-initials");
+              el.textContent = initials;
+            },
+            { once: true },
+          );
+        }
+      } else {
+        el.textContent = preferInitials ? initials : initials;
+      }
+    };
+    paint(document.getElementById("sidebar-avatar"), true);
+    paint(document.getElementById("topbar-avatar"), true);
+  }
+
+  function applyCustomization() {
+    const accent = state.settings.accentColor || "#2B59FF";
+    document.documentElement.style.setProperty("--primary", accent);
+    document.documentElement.style.setProperty("--primary-deep", accent);
+    document.documentElement.style.setProperty("--blue", accent);
+
+    const roleKey = normalizeRole(state.user?.role);
+    const roleName = formatRoleLabel(roleKey);
+    const userName = state.user.displayName || state.user.username || "Signed in";
+
+    const nameEl = document.getElementById("brand-name");
+    const tagEl = document.getElementById("brand-tagline");
+    const brand = document.querySelector(".brand");
+    if (nameEl) nameEl.textContent = roleName;
+    if (tagEl) tagEl.textContent = userName;
+    if (brand) brand.setAttribute("aria-label", `Permanent SEO · ${roleName}`);
+
+    const userEl = document.getElementById("sidebar-user-name");
+    const roleEl = document.getElementById("sidebar-user-role");
+    if (userEl) userEl.textContent = userName;
+    if (roleEl) roleEl.textContent = roleName;
+
+    const topName = document.getElementById("topbar-user-name");
+    const topRole = document.getElementById("topbar-user-role");
+    if (topName) topName.textContent = userName;
+    if (topRole) topRole.textContent = roleName;
+    applyAvatarElements();
+
+    const pricingNav = document.getElementById("nav-pricing-item");
+    if (pricingNav) pricingNav.hidden = false;
+  }
+
   function renderBanner() {
     const banner = cfg.pricingBanner;
+    const showForBasic = !banner?.basicOnly || isBasicPlan();
+    const snoozed = state.bannerSnoozed || isUpgradeSnoozed();
     if (
       state.nav !== "dashboard" ||
       !banner?.enabled ||
-      state.bannerDismissed
+      snoozed ||
+      !showForBasic ||
+      (banner.adminOnly && !isAdmin())
     ) {
       bannerRoot.innerHTML = "";
       return;
     }
     bannerRoot.innerHTML = `
-      <aside class="pricing-banner" aria-label="Pricing offer">
+      <aside class="pricing-banner" aria-label="Upgrade reminder">
         <div class="pricing-banner-copy">
           ${banner.badge ? `<span class="pricing-banner-badge">${escapeHtml(banner.badge)}</span>` : ""}
           <p class="pricing-banner-title">${escapeHtml(banner.title)}</p>
@@ -419,10 +1802,10 @@
         </div>
         <div class="pricing-banner-actions">
           <span class="pricing-banner-price">${escapeHtml(banner.priceLabel)}</span>
-          <a href="${escapeHtml(banner.ctaHref)}" class="btn primary">${escapeHtml(banner.ctaText)}</a>
+          <button type="button" class="btn primary" id="banner-view-plans">${escapeHtml(banner.ctaText)}</button>
           ${
             banner.dismissible !== false
-              ? `<button type="button" class="pricing-banner-dismiss" id="dismiss-banner" aria-label="Dismiss pricing banner">×</button>`
+              ? `<button type="button" class="pricing-banner-dismiss" id="dismiss-banner" aria-label="Snooze upgrade reminder">×</button>`
               : ""
           }
         </div>
@@ -430,10 +1813,71 @@
     `;
   }
 
+  function renderUpgradeNag() {
+    if (!upgradeNagRoot) return;
+    if (!isBasicPlan() || state.nav === "pricing") {
+      upgradeNagRoot.hidden = true;
+      upgradeNagRoot.innerHTML = "";
+      return;
+    }
+    if (isUpgradeSnoozed()) {
+      upgradeNagRoot.hidden = true;
+      upgradeNagRoot.innerHTML = "";
+      return;
+    }
+    upgradeNagRoot.hidden = false;
+    upgradeNagRoot.innerHTML = `
+      <div class="upgrade-nag-bar" role="region" aria-label="Upgrade reminder">
+        <div class="upgrade-nag-copy">
+          <strong>Basic plan limit</strong>
+          <span>Upgrade for more stores (Essential 4 · Advance unlimited) and more Scrape now runs (8 · 12).</span>
+        </div>
+        <div class="upgrade-nag-actions">
+          <button type="button" class="btn primary" id="nag-upgrade-cta">View plans</button>
+          <button type="button" class="btn ghost" id="nag-upgrade-snooze">Remind me later</button>
+        </div>
+      </div>
+    `;
+    document.getElementById("nag-upgrade-cta")?.addEventListener("click", () => goToPricing());
+    document.getElementById("nag-upgrade-snooze")?.addEventListener("click", () => {
+      snoozeUpgradeReminders();
+      renderUpgradeNag();
+      renderBanner();
+    });
+  }
+
+  function syncHeaderActions() {
+    const scrapeBtn = document.getElementById("btn-scrape-all");
+    if (!scrapeBtn) return;
+    const onCompetitors = state.nav === "competitors";
+    const scrapeOk = canScrapeNow();
+    scrapeBtn.hidden = !onCompetitors;
+    scrapeBtn.disabled = state.scraping || !state.competitors.length || !scrapeOk;
+    scrapeBtn.textContent = state.scraping
+      ? "Scraping…"
+      : scrapeOk
+        ? `Scrape All Now (${scrapeNowLeft()} left)`
+        : "Scrape limit reached";
+    scrapeBtn.title = scrapeOk
+      ? `${scrapeNowLeft()} Scrape now runs left this month`
+      : "Monthly Scrape now limit reached — upgrade for more";
+  }
+
   function render() {
     const meta = titles[state.nav];
     titleEl.textContent = meta.title;
     subtitleEl.textContent = meta.subtitle;
+    const pageHeader = document.querySelector(".page-header");
+    if (pageHeader) {
+      pageHeader.hidden = state.nav === "dashboard";
+    }
+    const monitorStatus = document.getElementById("topbar-monitor-status");
+    if (monitorStatus) {
+      const active = state.competitors.filter((c) => c.enabled).length;
+      monitorStatus.textContent =
+        active > 0 ? `${active} stores monitoring` : "No stores yet";
+      monitorStatus.classList.toggle("is-live", active > 0);
+    }
     document.querySelectorAll(".nav-item").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.nav === state.nav);
       btn.setAttribute(
@@ -441,24 +1885,33 @@
         btn.dataset.nav === state.nav ? "page" : "false",
       );
     });
+    const helpBtn = document.getElementById("help-centre-btn");
+    if (helpBtn) {
+      helpBtn.classList.toggle("active", state.nav === "help");
+      helpBtn.setAttribute(
+        "aria-current",
+        state.nav === "help" ? "page" : "false",
+      );
+    }
     renderBanner();
+    renderUpgradeNag();
+    syncHeaderActions();
+    applyCustomization();
     root.setAttribute("aria-busy", state.loading ? "true" : "false");
 
     if (state.nav === "dashboard") root.innerHTML = renderDashboard();
     else if (state.nav === "competitors") root.innerHTML = renderCompetitors();
     else if (state.nav === "products") root.innerHTML = renderProducts();
     else if (state.nav === "runs") root.innerHTML = renderRuns();
+    else if (state.nav === "pricing") root.innerHTML = renderPricing();
+    else if (state.nav === "help") root.innerHTML = renderHelp();
     else root.innerHTML = renderSettings();
 
     bindViewEvents();
+    startPricingTimer();
   }
 
   function bindViewEvents() {
-    const scrapeAll = document.getElementById("scrape-all");
-    if (scrapeAll) {
-      scrapeAll.onclick = () => void onScrapeNow();
-    }
-
     const addForm = document.getElementById("add-form");
     if (addForm) {
       addForm.onsubmit = (e) => {
@@ -473,6 +1926,14 @@
       };
     }
 
+    const cancelAdd = document.getElementById("btn-cancel-add");
+    if (cancelAdd) {
+      cancelAdd.onclick = () => {
+        state.showAddForm = false;
+        render();
+      };
+    }
+
     const filter = document.getElementById("filter-competitor");
     if (filter) {
       filter.onchange = () => {
@@ -481,27 +1942,248 @@
       };
     }
 
-    const markAll = document.getElementById("mark-all-seen");
-    if (markAll) {
-      markAll.onclick = () => void markAllSeen();
+    const competitorRange = document.getElementById("competitor-range");
+    if (competitorRange) {
+      competitorRange.onchange = () => {
+        state.competitorRange = competitorRange.value || "7d";
+        render();
+      };
     }
+
+    root.querySelectorAll("[data-product-view]").forEach((btn) => {
+      btn.onclick = () => {
+        state.productView = btn.getAttribute("data-product-view") || "active";
+        void load();
+      };
+    });
 
     const cronToggle = document.getElementById("daily-cron-toggle");
     if (cronToggle) {
       cronToggle.onclick = () => void onDailyCronToggle();
     }
 
+    const customizationForm = document.getElementById("customization-form");
+    if (customizationForm) {
+      customizationForm.onsubmit = (e) => {
+        e.preventDefault();
+        const data = new FormData(customizationForm);
+        void onSaveCustomization({
+          brandName: String(data.get("brandName") || ""),
+          brandTagline: String(data.get("brandTagline") || ""),
+          accentColor: String(data.get("accentColor") || ""),
+        });
+      };
+    }
+
+    const profileForm = document.getElementById("profile-form");
+    if (profileForm) {
+      profileForm.onsubmit = (e) => {
+        e.preventDefault();
+        const data = new FormData(profileForm);
+        void onCreateProfile({
+          displayName: String(data.get("displayName") || ""),
+          username: String(data.get("username") || ""),
+          password: String(data.get("password") || ""),
+          role: String(data.get("role") || "seo-analystic"),
+        });
+      };
+    }
+
+    root.querySelectorAll("[data-profile-id]").forEach((row) => {
+      const id = row.getAttribute("data-profile-id");
+      row
+        .querySelector('[data-profile-action="edit"]')
+        ?.addEventListener("click", () => void onEditProfile(id));
+      row
+        .querySelector('[data-profile-action="delete"]')
+        ?.addEventListener("click", () => void onDeleteProfile(id));
+    });
+
+    root.querySelectorAll("[data-avatar-emoji]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void onSaveAvatar({
+          avatarEmoji: btn.getAttribute("data-avatar-emoji") || "👔",
+          avatarImage: null,
+        });
+      });
+    });
+
+    const avatarInput = document.getElementById("avatar-file-input");
+    if (avatarInput) {
+      avatarInput.onchange = () => {
+        const file = avatarInput.files?.[0];
+        if (!file) return;
+        if (file.size > 180000) {
+          setError("Image is too large. Please use a file under ~150KB.");
+          return;
+        }
+        const reader = new FileReader();
+        reader.onload = () => {
+          const result = String(reader.result || "");
+          if (!result.startsWith("data:image/")) {
+            setError("Could not read that image file.");
+            return;
+          }
+          void onSaveAvatar({ avatarImage: result });
+        };
+        reader.onerror = () => setError("Could not read that image file.");
+        reader.readAsDataURL(file);
+      };
+    }
+
+    const clearAvatar = document.getElementById("avatar-clear-image");
+    if (clearAvatar) {
+      clearAvatar.onclick = () => void onSaveAvatar({ avatarImage: null });
+    }
+
     const dismiss = document.getElementById("dismiss-banner");
     if (dismiss) {
       dismiss.onclick = () => {
-        state.bannerDismissed = true;
-        const key = cfg.pricingBanner?.storageKey || "cm-pricing-banner-dismissed";
-        try {
-          localStorage.setItem(key, "1");
-        } catch {
-          /* ignore */
-        }
+        snoozeUpgradeReminders();
         render();
+      };
+    }
+
+    const viewPlans = document.getElementById("banner-view-plans");
+    if (viewPlans) {
+      viewPlans.onclick = () => {
+        goToPricing();
+      };
+    }
+
+    const billingToggle = document.getElementById("billing-cycle-toggle");
+    if (billingToggle) {
+      billingToggle.onchange = () => {
+        state.billingCycle = billingToggle.checked ? "yearly" : "monthly";
+        render();
+      };
+    }
+
+    root.querySelectorAll("[data-billing]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.billingCycle =
+          btn.getAttribute("data-billing") === "yearly" ? "yearly" : "monthly";
+        render();
+      });
+    });
+
+    const termSelect = document.getElementById("billing-term-select");
+    if (termSelect) {
+      termSelect.onchange = () => {
+        state.billingCycle = termSelect.value === "yearly" ? "yearly" : "monthly";
+        render();
+      };
+    }
+
+    const setBasicTierByIndex = (index) => {
+      const basic = (state.pricingPlans || []).find((p) => p.id === "basic");
+      const tier = basic?.tiers?.[Number(index)];
+      if (tier) {
+        state.basicTierId = tier.id;
+        render();
+      }
+    };
+
+    const tierRange = document.getElementById("basic-tier-range");
+    if (tierRange) {
+      tierRange.oninput = () => setBasicTierByIndex(tierRange.value);
+    }
+
+    root.querySelectorAll("[data-basic-tier]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.basicTierId = btn.getAttribute("data-basic-tier") || "basic-8h";
+        render();
+      });
+    });
+
+    root.querySelectorAll("[data-open-pricing]").forEach((btn) => {
+      btn.addEventListener("click", () => goToPricing());
+    });
+
+    root.querySelectorAll("[data-dash-action]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const action = btn.getAttribute("data-dash-action");
+        if (action === "new-competitor") {
+          if (!canAddCompetitor()) {
+            promptPlanUpgrade(
+              "Competitor limit reached on your plan. Upgrade to add more stores.",
+            );
+            goToPricing();
+            return;
+          }
+          state.nav = "competitors";
+          state.showAddForm = true;
+          render();
+          return;
+        }
+        if (action === "products") {
+          state.nav = "products";
+          render();
+          return;
+        }
+        if (action === "help") {
+          state.nav = "help";
+          state.helpOption = "ticket";
+          render();
+          return;
+        }
+        if (action === "settings") {
+          state.nav = "settings";
+          render();
+          return;
+        }
+        if (action === "runs") {
+          state.nav = "runs";
+          render();
+          return;
+        }
+        if (action === "pricing") {
+          goToPricing();
+          return;
+        }
+        if (action === "scrape") {
+          void onScrapeNow();
+        }
+      });
+    });
+
+    const resetTimer = document.getElementById("pricing-reset-timer");
+    if (resetTimer) {
+      resetTimer.onclick = () => void onResetPricingTimer();
+    }
+
+    root.querySelectorAll("[data-choose-plan]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        void onChoosePlan(btn.getAttribute("data-choose-plan"));
+      });
+    });
+
+    root.querySelectorAll("[data-help-option]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        state.helpOption = btn.getAttribute("data-help-option") || "ticket";
+        render();
+      });
+    });
+
+    const ticketForm = document.getElementById("help-ticket-form");
+    if (ticketForm) {
+      ticketForm.onsubmit = (e) => {
+        e.preventDefault();
+        const data = new FormData(ticketForm);
+        const subject = String(data.get("subject") || "").trim();
+        const message = String(data.get("message") || "").trim();
+        if (!subject || !message) return;
+        const body = [
+          message,
+          "",
+          `—`,
+          `From: ${state.user.displayName || state.user.username || "Dashboard user"}`,
+          `Role: ${formatRoleLabel(state.user.role)}`,
+        ].join("\n");
+        const mailto = `mailto:${HELP_EMAIL}?subject=${encodeURIComponent(
+          `[Ticket] ${subject}`,
+        )}&body=${encodeURIComponent(body)}`;
+        window.location.href = mailto;
       };
     }
 
@@ -520,24 +2202,39 @@
 
     root.querySelectorAll(".product-card").forEach((card) => {
       const id = card.getAttribute("data-id");
-      card.querySelector('[data-action="seen"]')?.addEventListener("click", () =>
-        void markSeen(id),
-      );
+      card
+        .querySelector('[data-action="needs_upload"]')
+        ?.addEventListener("click", () => void updateProduct(id, "needs_upload"));
+      card
+        .querySelector('[data-action="delete"]')
+        ?.addEventListener("click", () => void updateProduct(id, "delete"));
+      card
+        .querySelector('[data-action="restore"]')
+        ?.addEventListener("click", () => void updateProduct(id, "restore"));
+      card.querySelectorAll("img[data-fallback]").forEach((img) => {
+        img.addEventListener("error", () => {
+          img.classList.add("is-broken");
+          img.removeAttribute("src");
+        });
+      });
     });
   }
 
   async function load() {
     setError(null);
     try {
-      const [cRes, pRes] = await Promise.all([
+      const [cRes, pRes, sRes, profilesRes, meRes] = await Promise.all([
         apiFetch("/api/competitors"),
         apiFetch(
-          `/api/products?newOnly=1${
+          `/api/products?view=${encodeURIComponent(state.productView || "active")}${
             state.filterCompetitorId !== "all"
               ? `&competitorId=${encodeURIComponent(state.filterCompetitorId)}`
               : ""
           }`,
         ),
+        apiFetch("/api/settings"),
+        apiFetch("/api/profiles"),
+        apiFetch("/api/me"),
       ]);
       if (!cRes.ok || !pRes.ok) throw new Error("Failed to load dashboard data");
       const cJson = await readJson(cRes);
@@ -545,10 +2242,55 @@
       state.competitors = cJson.competitors || [];
       state.products = pJson.products || [];
       state.runs = pJson.runs || [];
-      if (cJson.settings) {
+      if (cJson.planUsage) applyPlanUsage(cJson.planUsage);
+      if (pJson.view) state.productView = pJson.view;
+      if (sRes.ok) {
+        const sJson = await readJson(sRes);
+        if (sJson.settings) {
+          state.settings = {
+            dailyCronEnabled: sJson.settings.dailyCronEnabled !== false,
+            brandName: sJson.settings.brandName || "Permanent SEO",
+            brandTagline: sJson.settings.brandTagline || "Competitor intel",
+            accentColor: sJson.settings.accentColor || "#2B59FF",
+            pricingOfferEndsAt: sJson.settings.pricingOfferEndsAt || null,
+            subscriptionPlan: sJson.settings.subscriptionPlan || "basic",
+            manualScrapePeriod: sJson.settings.manualScrapePeriod || null,
+            manualScrapeUsed: Number(sJson.settings.manualScrapeUsed || 0),
+          };
+        }
+      } else if (cJson.settings) {
         state.settings = {
+          ...state.settings,
           dailyCronEnabled: cJson.settings.dailyCronEnabled !== false,
+          subscriptionPlan: cJson.settings.subscriptionPlan || state.settings.subscriptionPlan,
+          manualScrapePeriod: cJson.settings.manualScrapePeriod || null,
+          manualScrapeUsed: Number(cJson.settings.manualScrapeUsed || 0),
         };
+      }
+      if (profilesRes.ok) {
+        const profilesJson = await readJson(profilesRes);
+        state.profiles = profilesJson.profiles || [];
+      }
+      if (meRes.ok) {
+        const meJson = await readJson(meRes);
+        if (Array.isArray(meJson.avatarEmojis) && meJson.avatarEmojis.length) {
+          state.avatarEmojis = meJson.avatarEmojis;
+        }
+        if (meJson.user) {
+          state.user = {
+            ...meJson.user,
+            role: normalizeRole(meJson.user.role),
+            avatarEmoji: sanitizeAvatarEmoji(
+              meJson.user.avatarEmoji,
+              meJson.user.role,
+            ),
+            avatarImage: meJson.user.avatarImage || "",
+          };
+        }
+      }
+      await loadPricing();
+      if (isBasicPlan() && !isUpgradeSnoozed() && state.nav === "dashboard") {
+        /* banner + sticky bar render via render() */
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Load failed");
@@ -558,7 +2300,84 @@
     }
   }
 
+  async function loadPricing() {
+    try {
+      const res = await apiFetch("/api/pricing");
+      if (!res.ok) return;
+      const json = await readJson(res);
+      state.pricingPlans = json.plans || [];
+      state.featureSections = json.featureSections || [];
+      state.planIncludes = json.planIncludes || [];
+      state.trustBadges = json.trustBadges || [];
+      state.pricingFaqs = json.faqs || [];
+      if (typeof json.yearlyDiscount === "number") {
+        state.yearlyDiscount = json.yearlyDiscount;
+      }
+      if (json.offerEndsAt) {
+        state.settings.pricingOfferEndsAt = json.offerEndsAt;
+      }
+      if (json.subscriptionPlan) {
+        state.settings.subscriptionPlan = json.subscriptionPlan;
+      }
+      if (json.planUsage) applyPlanUsage(json.planUsage);
+    } catch {
+      /* ignore — page still renders with empty plans */
+    }
+  }
+
+  async function onChoosePlan(planId) {
+    const plan = String(planId || "").toLowerCase();
+    if (!["basic", "essential", "advance"].includes(plan)) return;
+    state.choosingPlan = true;
+    render();
+    setError(null);
+    try {
+      const res = await apiFetch("/api/pricing/plan", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ plan }),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not update plan");
+      state.settings.subscriptionPlan = json.subscriptionPlan || plan;
+      if (plan !== "basic") clearUpgradeSnooze();
+      if (upgradeToast) upgradeToast.hidden = true;
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update plan");
+    } finally {
+      state.choosingPlan = false;
+      render();
+    }
+  }
+
+  async function onResetPricingTimer() {
+    if (!isAdmin()) return;
+    setError(null);
+    try {
+      const res = await apiFetch("/api/pricing/timer", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pricingOfferEndsAt: null }),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not reset timer");
+      state.settings.pricingOfferEndsAt = json.offerEndsAt;
+      render();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not reset timer");
+      render();
+    }
+  }
+
   async function onAddCompetitor() {
+    if (!canAddCompetitor()) {
+      promptPlanUpgrade(
+        "Competitor limit reached on your plan. Upgrade to add more stores.",
+      );
+      goToPricing();
+      return;
+    }
     state.saving = true;
     setError(null);
     render();
@@ -569,8 +2388,17 @@
         body: JSON.stringify(state.form),
       });
       const json = await readJson(res);
-      if (!res.ok) throw new Error(json.error || "Could not add competitor");
+      if (json.planUsage) applyPlanUsage(json.planUsage);
+      if (!res.ok) {
+        if (json.code === "COMPETITOR_LIMIT") {
+          promptPlanUpgrade(json.error || "Competitor limit reached.");
+          goToPricing();
+          return;
+        }
+        throw new Error(json.error || "Could not add competitor");
+      }
       state.form = { name: "", sitemapUrl: "", intervalHours: 5 };
+      state.showAddForm = false;
       state.nav = "competitors";
       await load();
     } catch (err) {
@@ -605,6 +2433,7 @@
       );
       const json = await readJson(res);
       if (!res.ok) throw new Error(json.error || "Could not delete competitor");
+      if (json.planUsage) applyPlanUsage(json.planUsage);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete competitor");
@@ -612,6 +2441,13 @@
   }
 
   async function onScrapeNow(competitorId) {
+    if (!canScrapeNow()) {
+      promptPlanUpgrade(
+        "Scrape now limit reached for this month. Upgrade for more manual runs.",
+      );
+      goToPricing();
+      return;
+    }
     state.scraping = true;
     setError(null);
     render();
@@ -622,7 +2458,15 @@
         body: JSON.stringify(competitorId ? { competitorId } : {}),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Scrape failed");
+      if (json.planUsage) applyPlanUsage(json.planUsage);
+      if (!res.ok) {
+        if (json.code === "SCRAPE_QUOTA") {
+          promptPlanUpgrade(json.error || "Scrape now limit reached.");
+          goToPricing();
+          return;
+        }
+        throw new Error(json.error || "Scrape failed");
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Scrape failed");
@@ -632,28 +2476,21 @@
     }
   }
 
-  async function markSeen(id) {
-    await apiFetch("/api/products", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
-    });
-    await load();
-  }
-
-  async function markAllSeen() {
-    await apiFetch("/api/products", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        markAll: true,
-        competitorId:
-          state.filterCompetitorId === "all"
-            ? undefined
-            : state.filterCompetitorId,
-      }),
-    });
-    await load();
+  async function updateProduct(id, action) {
+    setError(null);
+    try {
+      const res = await apiFetch("/api/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, action }),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not update product");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update product");
+      render();
+    }
   }
 
   async function onDailyCronToggle() {
@@ -682,24 +2519,219 @@
     }
   }
 
+  async function onSaveAvatar(patch) {
+    state.savingAvatar = true;
+    setError(null);
+    try {
+      const res = await apiFetch("/api/me/avatar", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not update avatar");
+      if (json.profile) {
+        state.user = {
+          ...state.user,
+          avatarEmoji:
+            json.profile.avatarEmoji ||
+            defaultAvatarEmoji(json.profile.role || state.user.role),
+          avatarImage: json.profile.avatarImage || "",
+        };
+      }
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update avatar");
+      render();
+    } finally {
+      state.savingAvatar = false;
+    }
+  }
+
+  async function onSaveCustomization(patch) {
+    state.savingCustomization = true;
+    setError(null);
+    render();
+    try {
+      const res = await apiFetch("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not save customization");
+      state.settings = {
+        ...state.settings,
+        ...json.settings,
+      };
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save customization");
+    } finally {
+      state.savingCustomization = false;
+      render();
+    }
+  }
+
+  async function onCreateProfile(input) {
+    state.savingProfile = true;
+    setError(null);
+    render();
+    try {
+      const res = await apiFetch("/api/profiles", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(input),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not add profile");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not add profile");
+      state.savingProfile = false;
+      render();
+    } finally {
+      state.savingProfile = false;
+    }
+  }
+
+  async function onEditProfile(id) {
+    const profile = state.profiles.find((p) => p.id === id);
+    if (!profile) return;
+    const displayName = window.prompt("Display name", profile.displayName || "");
+    if (displayName === null) return;
+    const username = window.prompt("Username", profile.username || "");
+    if (username === null) return;
+    const password = window.prompt(
+      "New password (leave blank to keep current)",
+      "",
+    );
+    if (password === null) return;
+    const role = window.prompt(
+      "Role (owner, admin, or seo-analystic)",
+      profile.role || "seo-analystic",
+    );
+    if (role === null) return;
+    setError(null);
+    try {
+      const body = {
+        id,
+        displayName: displayName.trim() || profile.displayName,
+        username: username.trim() || profile.username,
+        role: normalizeRole(role),
+      };
+      if (password.trim()) body.password = password.trim();
+      const res = await apiFetch("/api/profiles", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not update profile");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update profile");
+      render();
+    }
+  }
+
+  async function onDeleteProfile(id) {
+    if (!window.confirm("Remove this login profile?")) return;
+    setError(null);
+    try {
+      const res = await apiFetch("/api/profiles", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id }),
+      });
+      const json = await readJson(res);
+      if (!res.ok) throw new Error(json.error || "Could not remove profile");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not remove profile");
+      render();
+    }
+  }
+
   document.getElementById("nav-list")?.addEventListener("click", (e) => {
     const btn = e.target.closest("[data-nav]");
     if (!btn) return;
-    state.nav = btn.dataset.nav;
+    const next = btn.dataset.nav;
+    state.nav = next;
+    if (state.nav !== "competitors") state.showAddForm = false;
+    if (state.nav === "help") state.helpOption = "ticket";
+    maybeNagOnNav();
+    render();
+    if (state.nav === "pricing") void loadPricing().then(() => render());
+  });
+
+  document.getElementById("help-centre-btn")?.addEventListener("click", () => {
+    state.nav = "help";
+    state.helpOption = "ticket";
+    render();
+  });
+
+  document.getElementById("sidebar-upgrade-cta")?.addEventListener("click", () => {
+    goToPricing();
+  });
+
+  document.getElementById("global-search")?.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    const q = e.currentTarget.value.trim().toLowerCase();
+    if (!q) return;
+    const competitor = state.competitors.find(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        String(c.sitemapUrl || "").toLowerCase().includes(q),
+    );
+    if (competitor) {
+      state.nav = "competitors";
+      render();
+      return;
+    }
+    state.nav = "products";
     render();
   });
 
   document.getElementById("btn-new-competitor")?.addEventListener("click", () => {
+    if (!canAddCompetitor()) {
+      promptPlanUpgrade(
+        "Competitor limit reached on your plan. Upgrade to add more stores.",
+      );
+      goToPricing();
+      return;
+    }
     state.nav = "competitors";
+    state.showAddForm = true;
     render();
+    requestAnimationFrame(() => {
+      document.getElementById("add-competitor-panel")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      document.querySelector("#add-form input[name='name']")?.focus();
+    });
+  });
+
+  document.getElementById("btn-scrape-all")?.addEventListener("click", () => {
+    void onScrapeNow();
   });
 
   try {
-    const key = cfg.pricingBanner?.storageKey || "cm-pricing-banner-dismissed";
-    if (localStorage.getItem(key) === "1") state.bannerDismissed = true;
+    state.bannerSnoozed = isUpgradeSnoozed();
   } catch {
     /* ignore */
   }
+
+  // Re-surface upgrade reminders for Basic users every 12 minutes.
+  setInterval(() => {
+    if (!isBasicPlan()) return;
+    if (isUpgradeSnoozed()) return;
+    showUpgradeToast(
+      "Reminder: you're still on Basic. Upgrade for more competitor slots and automation.",
+    );
+    renderUpgradeNag();
+    if (state.nav === "dashboard") renderBanner();
+  }, 12 * 60 * 1000);
 
   render();
   void load();

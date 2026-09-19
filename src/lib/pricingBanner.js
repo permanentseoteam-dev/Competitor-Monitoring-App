@@ -1,16 +1,25 @@
 "use strict";
 
+/**
+ * Upgrade nag for Basic plan users.
+ * Dismiss only snoozes briefly — reminders keep coming back.
+ */
 const pricingBanner = {
   enabled: true,
-  title: "Unlock Pro monitoring",
+  title: "You're on Basic — unlock more stores",
   subtitle:
-    "Higher scrape limits, priority runs, and longer product history for growing catalogs.",
-  priceLabel: "$29/mo",
-  ctaText: "View plans",
-  ctaHref: "#pricing",
-  badge: "Pro",
+    "Essential & Advance add competitor slots, upload queue, daily scrapes, and priority runs.",
+  priceLabel: "From $24.99/mo",
+  ctaText: "Upgrade plan",
+  ctaHref: "#",
+  badge: "Upgrade",
+  /** Soft snooze only — never permanently dismiss for Basic users */
   dismissible: true,
-  storageKey: "cm-pricing-banner-dismissed",
+  snoozeMs: 45 * 60 * 1000,
+  storageKey: "cm-upgrade-snooze-until",
+  adminOnly: false,
+  /** Show only while workspace subscription is Basic */
+  basicOnly: true,
 };
 
 module.exports = { pricingBanner };

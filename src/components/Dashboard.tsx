@@ -135,8 +135,8 @@ function TrendChart({
     <svg className="trend-chart" viewBox={`0 0 ${width} ${height}`} role="img">
       <defs>
         <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="#6366f1" stopOpacity="0.35" />
-          <stop offset="100%" stopColor="#6366f1" stopOpacity="0.02" />
+          <stop offset="0%" stopColor="#2B59FF" stopOpacity="0.35" />
+          <stop offset="100%" stopColor="#2B59FF" stopOpacity="0.02" />
         </linearGradient>
         <linearGradient id="newFill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#34d399" stopOpacity="0.35" />
@@ -159,7 +159,7 @@ function TrendChart({
       <path
         d={line(points.map((p) => p.urls))}
         fill="none"
-        stroke="#6366f1"
+        stroke="#2B59FF"
         strokeWidth="2.5"
       />
       <path

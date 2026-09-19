@@ -26,7 +26,7 @@ router.get("/api/cron", async (req, res, next) => {
         ran: 0,
         skipped: true,
         reason: "disabled",
-        mode: "daily-9am",
+        mode: "daily-8am",
         ranAt: new Date().toISOString(),
       });
     }
@@ -36,7 +36,7 @@ router.get("/api/cron", async (req, res, next) => {
       ok: true,
       ran,
       skipped: false,
-      mode: "daily-9am",
+      mode: "daily-8am",
       ranAt: new Date().toISOString(),
     });
   } catch (error) {

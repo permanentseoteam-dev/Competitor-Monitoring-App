@@ -4,11 +4,14 @@ const express = require("express");
 const {
   listProducts,
   listRecentScrapeRuns,
-  markAllProductsSeen,
-  markProductSeen,
+  markProductNeedsUpload,
+  restoreProduct,
+  softDeleteProduct,
 } = require("../lib/db");
 
 const router = express.Router();
+
+const PRODUCT_VIEWS = new Set(["active", "needs_upload", "recycle"]);
 
 router.get("/api/products", async (req, res, next) => {
   try {
@@ -16,12 +19,15 @@ router.get("/api/products", async (req, res, next) => {
       typeof req.query.competitorId === "string"
         ? req.query.competitorId
         : undefined;
-    const newOnly = req.query.newOnly !== "0";
+    const view =
+      typeof req.query.view === "string" && PRODUCT_VIEWS.has(req.query.view)
+        ? req.query.view
+        : "active";
     const [products, runs] = await Promise.all([
-      listProducts({ competitorId, newOnly }),
+      listProducts({ competitorId, view }),
       listRecentScrapeRuns(12),
     ]);
-    res.json({ products, runs });
+    res.json({ products, runs, view });
   } catch (error) {
     next(error);
   }
@@ -30,16 +36,26 @@ router.get("/api/products", async (req, res, next) => {
 router.patch("/api/products", async (req, res, next) => {
   try {
     const data = req.body || {};
-    if (data.markAll) {
-      const updated = await markAllProductsSeen(data.competitorId);
-      return res.json({ updated });
-    }
-    if (!data.id) {
+    if (!data.id || typeof data.id !== "string") {
       return res.status(400).json({ error: "Missing id" });
     }
-    const ok = await markProductSeen(data.id);
+
+    const action = data.action;
+    let ok = false;
+    if (action === "needs_upload") {
+      ok = await markProductNeedsUpload(data.id);
+    } else if (action === "delete") {
+      ok = await softDeleteProduct(data.id);
+    } else if (action === "restore") {
+      ok = await restoreProduct(data.id);
+    } else {
+      return res.status(400).json({
+        error: "Invalid action. Use needs_upload, delete, or restore.",
+      });
+    }
+
     if (!ok) return res.status(404).json({ error: "Not found" });
-    return res.json({ ok: true });
+    return res.json({ ok: true, action });
   } catch (error) {
     next(error);
   }

@@ -7,10 +7,16 @@ const {
   deleteCompetitor,
   getCompetitor,
   getMonitorSnapshot,
+  getPlanUsage,
   updateCompetitor,
 } = require("../lib/db");
 const { scrapeCompetitor } = require("../lib/scrape");
 const { isIntervalHours } = require("../lib/types");
+const {
+  competitorLimitReached,
+  formatCompetitorLimit,
+  getPlanLimits,
+} = require("../lib/planLimits");
 
 const router = express.Router();
 
@@ -24,8 +30,8 @@ const createSchema = z.object({
 
 router.get("/api/competitors", async (_req, res, next) => {
   try {
-    const { competitors, settings } = await getMonitorSnapshot();
-    res.json({ competitors, settings });
+    const { competitors, settings, planUsage } = await getMonitorSnapshot();
+    res.json({ competitors, settings, planUsage });
   } catch (error) {
     next(error);
   }
@@ -41,6 +47,20 @@ router.post("/api/competitors", async (req, res, next) => {
       });
     }
 
+    const snapshot = await getMonitorSnapshot();
+    const plan = snapshot.settings.subscriptionPlan || "basic";
+    const limits = getPlanLimits(plan);
+
+    if (competitorLimitReached(plan, snapshot.competitors.length)) {
+      return res.status(403).json({
+        error: `Competitor limit reached (${formatCompetitorLimit(
+          limits.competitors,
+        )} on your ${limits.plan} plan). Upgrade to add more stores.`,
+        code: "COMPETITOR_LIMIT",
+        planUsage: snapshot.planUsage,
+      });
+    }
+
     const competitor = await createCompetitor(parsed.data);
     setImmediate(() => {
       scrapeCompetitor(competitor.id).catch((error) => {
@@ -48,7 +68,8 @@ router.post("/api/competitors", async (req, res, next) => {
       });
     });
 
-    return res.status(201).json({ competitor });
+    const planUsage = await getPlanUsage();
+    return res.status(201).json({ competitor, planUsage });
   } catch (error) {
     next(error);
   }
@@ -88,7 +109,8 @@ router.delete("/api/competitors", async (req, res, next) => {
     }
     const ok = await deleteCompetitor(id);
     if (!ok) return res.status(404).json({ error: "Not found" });
-    return res.json({ ok: true });
+    const planUsage = await getPlanUsage();
+    return res.json({ ok: true, planUsage });
   } catch (error) {
     next(error);
   }
