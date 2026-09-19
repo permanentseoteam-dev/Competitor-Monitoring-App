@@ -12,15 +12,17 @@ const {
   normalizeSubscriptionPlan,
   recycleExpiresAt,
 } = require("./types");
-const { normalizeScrapeQuota, buildPlanUsage, scrapeNowLimitReached } = require("./planLimits");
+const { normalizeScrapeQuota, buildPlanUsage, scrapeNowLimitReached, seatLimitReached } = require("./planLimits");
 const { hashPassword } = require("./password");
 const { normalizeRole } = require("./roles");
+const { buildRevenueSnapshot } = require("./revenue");
 
 const EMPTY_STORE = {
   competitors: [],
   products: [],
   scrapeRuns: [],
   profiles: [],
+  invites: [],
   settings: { ...DEFAULT_SETTINGS },
 };
 
@@ -113,12 +115,64 @@ function normalizeProduct(product) {
   };
 }
 
+function normalizeInvite(invite) {
+  const role = normalizeRole(invite?.role);
+  const expiresAt =
+    typeof invite?.expiresAt === "string" && !Number.isNaN(Date.parse(invite.expiresAt))
+      ? new Date(invite.expiresAt).toISOString()
+      : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  return {
+    id: invite.id || randomUUID(),
+    token: String(invite.token || randomUUID()).replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 64),
+    role: role === "admin" ? "admin" : "user",
+    note:
+      typeof invite.note === "string" && invite.note.trim()
+        ? invite.note.trim().slice(0, 120)
+        : "",
+    createdBy: invite.createdBy || null,
+    createdAt: invite.createdAt || new Date().toISOString(),
+    expiresAt,
+    usedAt:
+      typeof invite.usedAt === "string" && invite.usedAt ? invite.usedAt : null,
+    usedByProfileId: invite.usedByProfileId || null,
+  };
+}
+
+function publicInvite(invite) {
+  return {
+    id: invite.id,
+    token: invite.token,
+    role: invite.role,
+    note: invite.note,
+    createdAt: invite.createdAt,
+    expiresAt: invite.expiresAt,
+    usedAt: invite.usedAt,
+    status: invite.usedAt
+      ? "used"
+      : Date.parse(invite.expiresAt) <= Date.now()
+        ? "expired"
+        : "pending",
+  };
+}
+
+function pendingInviteCount(invites = []) {
+  const now = Date.now();
+  return (invites || []).filter(
+    (inv) => !inv.usedAt && Date.parse(inv.expiresAt) > now,
+  ).length;
+}
+
+function seatOccupancy(store) {
+  return (store.profiles || []).length + pendingInviteCount(store.invites);
+}
+
 function normalizeStore(store) {
   return {
     competitors: store.competitors ?? [],
     products: (store.products ?? []).map(normalizeProduct),
     scrapeRuns: store.scrapeRuns ?? [],
     profiles: (store.profiles ?? []).map(normalizeProfile),
+    invites: (store.invites ?? []).map(normalizeInvite),
     settings: normalizeSettings(store.settings),
   };
 }
@@ -224,6 +278,17 @@ function mergeMutation(before, local, remote) {
   }
   for (const p of local.profiles || []) profilesById.set(p.id, p);
 
+  const beforeInviteIds = new Set((before.invites || []).map((i) => i.id));
+  const localInviteIds = new Set((local.invites || []).map((i) => i.id));
+  const deletedInvites = [...beforeInviteIds].filter(
+    (id) => !localInviteIds.has(id),
+  );
+  const invitesById = new Map();
+  for (const inv of remote.invites || []) {
+    if (!deletedInvites.includes(inv.id)) invitesById.set(inv.id, inv);
+  }
+  for (const inv of local.invites || []) invitesById.set(inv.id, inv);
+
   return {
     competitors: [...competitorsById.values()].sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt),
@@ -231,6 +296,7 @@ function mergeMutation(before, local, remote) {
     products,
     scrapeRuns,
     profiles: [...profilesById.values()].map(normalizeProfile),
+    invites: [...invitesById.values()].map(normalizeInvite),
     settings: normalizeSettings(local.settings ?? remote.settings),
   };
 }
@@ -288,6 +354,7 @@ async function getMonitorSnapshot() {
       plan: settings.subscriptionPlan,
       competitorCount: competitors.length,
       settings,
+      seatCount: seatOccupancy(store),
     }),
   };
 }
@@ -592,10 +659,12 @@ async function consumeManualScrape() {
   return mutateStore((store) => {
     const settings = normalizeSettings(store.settings);
     const quota = normalizeScrapeQuota(settings);
+    const seatCount = seatOccupancy(store);
     const planUsage = buildPlanUsage({
       plan: settings.subscriptionPlan,
       competitorCount: store.competitors.length,
       settings: { ...settings, ...quota },
+      seatCount,
     });
 
     if (scrapeNowLimitReached(settings.subscriptionPlan, quota.manualScrapeUsed)) {
@@ -621,6 +690,7 @@ async function consumeManualScrape() {
         plan: store.settings.subscriptionPlan,
         competitorCount: store.competitors.length,
         settings: store.settings,
+        seatCount,
       }),
     };
   });
@@ -633,26 +703,60 @@ async function getPlanUsage() {
     plan: settings.subscriptionPlan,
     competitorCount: store.competitors.length,
     settings,
+    seatCount: seatOccupancy(store),
+  });
+}
+
+async function getRevenueStats() {
+  await ensureDefaultProfile();
+  const store = await readStore();
+  return buildRevenueSnapshot({
+    ...store,
+    settings: normalizeSettings(store.settings),
+    profiles: (store.profiles || []).map(normalizeProfile),
   });
 }
 
 async function ensureDefaultProfile() {
   return mutateStore(async (store) => {
-    if ((store.profiles || []).length > 0) return store.profiles.length;
-    const username = (process.env.AUTH_USERNAME || "Admin").trim();
-    const password = process.env.AUTH_PASSWORD || "royalvapery";
-    const now = new Date().toISOString();
-    store.profiles = [
-      {
-        id: randomUUID(),
-        username,
-        displayName: username,
-        role: "owner",
-        passwordHash: await hashPassword(password),
-        createdAt: now,
-        updatedAt: now,
-      },
-    ];
+    if ((store.profiles || []).length === 0) {
+      const username = (process.env.AUTH_USERNAME || "Admin").trim();
+      const password = process.env.AUTH_PASSWORD || "royalvapery";
+      const now = new Date().toISOString();
+      store.profiles = [
+        {
+          id: randomUUID(),
+          username,
+          displayName: username,
+          role: "super-admin",
+          passwordHash: await hashPassword(password),
+          createdAt: now,
+          updatedAt: now,
+        },
+      ];
+      return store.profiles.length;
+    }
+
+    /* Ensure at least one Super Admin exists (migrate legacy owner/admin seed). */
+    const hasSuper = store.profiles.some(
+      (p) => normalizeRole(p.role) === "super-admin",
+    );
+    if (!hasSuper) {
+      const seedName = (process.env.AUTH_USERNAME || "Admin").trim().toLowerCase();
+      let target =
+        store.profiles.find((p) => p.username.toLowerCase() === seedName) ||
+        store.profiles.find((p) => {
+          const role = normalizeRole(p.role);
+          return role === "admin" || role === "super-admin";
+        }) ||
+        store.profiles[0];
+      if (target) {
+        target.role = "super-admin";
+        target.updatedAt = new Date().toISOString();
+      }
+    }
+
+    store.profiles = store.profiles.map(normalizeProfile);
     return store.profiles.length;
   });
 }
@@ -689,6 +793,8 @@ async function createProfile(input) {
   if (!password || password.length < 6) {
     throw new Error("Password must be at least 6 characters");
   }
+  const role = normalizeRole(input.role);
+  const enforceSeatLimit = input.enforceSeatLimit !== false;
   return mutateStore(async (store) => {
     if (
       store.profiles.some(
@@ -697,12 +803,30 @@ async function createProfile(input) {
     ) {
       throw new Error("Username already exists");
     }
+    const settings = normalizeSettings(store.settings);
+    if (
+      enforceSeatLimit &&
+      seatLimitReached(settings.subscriptionPlan, seatOccupancy(store))
+    ) {
+      const usage = buildPlanUsage({
+        plan: settings.subscriptionPlan,
+        competitorCount: store.competitors.length,
+        settings,
+        seatCount: seatOccupancy(store),
+      });
+      const err = new Error(
+        `Invite limit reached (${usage.seats.limit} seats on your plan). Upgrade to invite more users.`,
+      );
+      err.code = "SEAT_LIMIT";
+      err.planUsage = usage;
+      throw err;
+    }
     const now = new Date().toISOString();
     const profile = normalizeProfile({
       id: randomUUID(),
       username,
       displayName: input.displayName || username,
-      role: normalizeRole(input.role),
+      role,
       passwordHash: await hashPassword(password),
       createdAt: now,
       updatedAt: now,
@@ -775,6 +899,153 @@ async function deleteProfile(id) {
   });
 }
 
+async function listInvites() {
+  await ensureDefaultProfile();
+  const store = await readStore();
+  return (store.invites || [])
+    .map(normalizeInvite)
+    .map(publicInvite)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
+async function findInviteByToken(token) {
+  await ensureDefaultProfile();
+  const store = await readStore();
+  const needle = String(token || "").trim();
+  if (!needle) return null;
+  const invite = (store.invites || []).find((inv) => inv.token === needle);
+  return invite ? normalizeInvite(invite) : null;
+}
+
+async function createInviteLink({ role = "user", note = "", createdBy = null, enforceSeatLimit = true }) {
+  await ensureDefaultProfile();
+  const inviteRole = normalizeRole(role) === "admin" ? "admin" : "user";
+  return mutateStore((store) => {
+    const settings = normalizeSettings(store.settings);
+    if (
+      enforceSeatLimit &&
+      seatLimitReached(settings.subscriptionPlan, seatOccupancy(store))
+    ) {
+      const usage = buildPlanUsage({
+        plan: settings.subscriptionPlan,
+        competitorCount: store.competitors.length,
+        settings,
+        seatCount: seatOccupancy(store),
+      });
+      const err = new Error(
+        `Invite limit reached (${usage.seats.limit} seats on your plan). Upgrade to invite more users.`,
+      );
+      err.code = "SEAT_LIMIT";
+      err.planUsage = usage;
+      throw err;
+    }
+    const now = new Date();
+    const invite = normalizeInvite({
+      id: randomUUID(),
+      token: randomUUID().replace(/-/g, ""),
+      role: inviteRole,
+      note,
+      createdBy,
+      createdAt: now.toISOString(),
+      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+    store.invites = store.invites || [];
+    store.invites.push(invite);
+    return publicInvite(invite);
+  });
+}
+
+async function revokeInvite(id) {
+  await ensureDefaultProfile();
+  return mutateStore((store) => {
+    const before = (store.invites || []).length;
+    store.invites = (store.invites || []).filter((inv) => inv.id !== id);
+    return store.invites.length < before;
+  });
+}
+
+async function acceptInvite({ token, username, password, displayName }) {
+  await ensureDefaultProfile();
+  const usernameClean = String(username || "").trim();
+  const passwordClean = String(password || "");
+  if (!usernameClean || usernameClean.length < 2) {
+    throw new Error("Username must be at least 2 characters");
+  }
+  if (!passwordClean || passwordClean.length < 6) {
+    throw new Error("Password must be at least 6 characters");
+  }
+  return mutateStore(async (store) => {
+    const invite = (store.invites || []).find(
+      (inv) => inv.token === String(token || "").trim(),
+    );
+    if (!invite) {
+      const err = new Error("Invite link is invalid");
+      err.code = "INVITE_INVALID";
+      throw err;
+    }
+    const normalized = normalizeInvite(invite);
+    if (normalized.usedAt) {
+      const err = new Error("Invite link was already used");
+      err.code = "INVITE_USED";
+      throw err;
+    }
+    if (Date.parse(normalized.expiresAt) <= Date.now()) {
+      const err = new Error("Invite link has expired");
+      err.code = "INVITE_EXPIRED";
+      throw err;
+    }
+    if (
+      store.profiles.some(
+        (p) => p.username.toLowerCase() === usernameClean.toLowerCase(),
+      )
+    ) {
+      throw new Error("Username already exists");
+    }
+    const settings = normalizeSettings(store.settings);
+    /* Pending invite already reserved a seat — occupancy without this invite. */
+    const occupiedWithoutThis =
+      store.profiles.length +
+      pendingInviteCount(
+        (store.invites || []).filter((inv) => inv.id !== normalized.id),
+      );
+    if (seatLimitReached(settings.subscriptionPlan, occupiedWithoutThis)) {
+      const usage = buildPlanUsage({
+        plan: settings.subscriptionPlan,
+        competitorCount: store.competitors.length,
+        settings,
+        seatCount: occupiedWithoutThis,
+      });
+      const err = new Error(
+        `Seat limit reached (${usage.seats.limit} on your plan). Ask an admin to upgrade.`,
+      );
+      err.code = "SEAT_LIMIT";
+      err.planUsage = usage;
+      throw err;
+    }
+
+    const now = new Date().toISOString();
+    const profile = normalizeProfile({
+      id: randomUUID(),
+      username: usernameClean,
+      displayName: displayName || usernameClean,
+      role: normalized.role,
+      passwordHash: await hashPassword(passwordClean),
+      createdAt: now,
+      updatedAt: now,
+    });
+    store.profiles.push(profile);
+    const idx = store.invites.findIndex((inv) => inv.id === normalized.id);
+    if (idx >= 0) {
+      store.invites[idx] = {
+        ...normalized,
+        usedAt: now,
+        usedByProfileId: profile.id,
+      };
+    }
+    return publicProfile(profile);
+  });
+}
+
 module.exports = {
   getMonitorSnapshot,
   listCompetitors,
@@ -807,4 +1078,10 @@ module.exports = {
   createProfile,
   updateProfile,
   deleteProfile,
+  getRevenueStats,
+  listInvites,
+  findInviteByToken,
+  createInviteLink,
+  revokeInvite,
+  acceptInvite,
 };

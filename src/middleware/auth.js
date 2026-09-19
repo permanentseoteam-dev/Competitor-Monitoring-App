@@ -5,6 +5,8 @@ const {
   deleteSession,
   getSession,
 } = require("../lib/session");
+const { findProfileById } = require("../lib/db");
+const { normalizeRole } = require("../lib/roles");
 
 async function requireAuth(req, res, next) {
   const session = await getSession(req);
@@ -15,6 +17,18 @@ async function requireAuth(req, res, next) {
     return res.redirect("/login");
   }
   req.session = session;
+  try {
+    if (session.userId) {
+      const profile = await findProfileById(session.userId);
+      if (profile) {
+        req.session.role = normalizeRole(profile.role);
+        req.session.displayName = profile.displayName || session.displayName;
+        req.session.username = profile.username || session.username;
+      }
+    }
+  } catch {
+    /* keep JWT session role if profile lookup fails */
+  }
   return next();
 }
 

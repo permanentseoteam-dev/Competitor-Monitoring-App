@@ -9,6 +9,8 @@ const {
   deleteSession,
   isAuthConfigured,
 } = require("../lib/session");
+const { acceptInvite, findInviteByToken } = require("../lib/db");
+const { roleLabel, normalizeRole } = require("../lib/roles");
 
 const router = express.Router();
 
@@ -78,6 +80,62 @@ router.post("/login", async (req, res) => {
 router.post("/logout", async (_req, res) => {
   await deleteSession(res);
   return res.redirect("/login");
+});
+
+router.get("/invite/:token", async (req, res) => {
+  const token = String(req.params.token || "").trim();
+  const invite = await findInviteByToken(token);
+  if (!invite || invite.usedAt || Date.parse(invite.expiresAt) <= Date.now()) {
+    return res.status(400).render("invite", {
+      token,
+      roleLabel: "User",
+      note: "",
+      error: null,
+      invalid: "This invite link is invalid or has expired.",
+    });
+  }
+  return res.render("invite", {
+    token: invite.token,
+    roleLabel: roleLabel(invite.role),
+    note: invite.note || "",
+    error: null,
+    invalid: null,
+  });
+});
+
+router.post("/invite/:token", async (req, res) => {
+  const token = String(req.params.token || "").trim();
+  const invite = await findInviteByToken(token);
+  const role = invite ? normalizeRole(invite.role) : "user";
+
+  if (!invite || invite.usedAt || Date.parse(invite.expiresAt) <= Date.now()) {
+    return res.status(400).render("invite", {
+      token,
+      roleLabel: roleLabel(role),
+      note: "",
+      error: null,
+      invalid: "This invite link is invalid or has expired.",
+    });
+  }
+
+  try {
+    const profile = await acceptInvite({
+      token,
+      username: req.body.username,
+      password: req.body.password,
+      displayName: req.body.displayName,
+    });
+    await createSession(res, profile);
+    return res.redirect("/");
+  } catch (error) {
+    return res.status(400).render("invite", {
+      token,
+      roleLabel: roleLabel(role),
+      note: invite.note || "",
+      error: error.message || "Could not create account",
+      invalid: null,
+    });
+  }
 });
 
 module.exports = router;

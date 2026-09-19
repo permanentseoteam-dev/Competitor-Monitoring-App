@@ -17,11 +17,6 @@
     <aside class="sidebar">
       <div class="brand" aria-label="Permanent SEO">
         <img class="brand-logo" src="/brand/logo.jpg" alt="Permanent SEO" width="48" height="48" />
-        <div class="brand-role-chip">
-          <span class="brand-role-dot" aria-hidden></span>
-          <strong id="brand-name">Role</strong>
-          <span id="brand-tagline">Signed in</span>
-        </div>
       </div>
 
       <ul class="nav-list" id="nav-list">
@@ -55,6 +50,12 @@
             Settings
           </button>
         </li>
+        <li id="nav-revenue-item" hidden>
+          <button type="button" class="nav-item" data-nav="revenue">
+            <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M4 19V5m4 14V9m4 10V7m4 12v-6m4 6V4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><path d="M4 19h16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            Revenue
+          </button>
+        </li>
         <li id="nav-pricing-item">
           <button type="button" class="nav-item" data-nav="pricing">
             <svg class="nav-icon" viewBox="0 0 24 24" fill="none" aria-hidden><path d="M12 3v18M7 8h7.5a2.5 2.5 0 0 1 0 5H9.5a2.5 2.5 0 0 0 0 5H17" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
@@ -84,7 +85,7 @@
             <span class="avatar is-initials" id="sidebar-avatar" aria-hidden>AD</span>
             <span class="profile-copy">
               <strong id="sidebar-user-name">Signed in</strong>
-              <span id="sidebar-user-role">seo-analystic</span>
+              <span id="sidebar-user-role">User</span>
             </span>
           </div>
           <form action="/logout" method="post">
@@ -109,11 +110,28 @@
           <input id="global-search" type="search" placeholder="Search competitors, products…" autocomplete="off" />
         </label>
         <div class="topbar-actions">
-          <div class="topbar-user">
-            <span class="avatar topbar-avatar is-initials" id="topbar-avatar" aria-hidden>AD</span>
-            <div>
-              <strong id="topbar-user-name">Signed in</strong>
-              <span id="topbar-user-role">Role</span>
+          <div class="profile-menu" id="profile-menu">
+            <button type="button" class="topbar-user profile-menu-trigger" id="profile-menu-trigger" aria-haspopup="menu" aria-expanded="false" aria-controls="profile-menu-dropdown">
+              <span class="avatar topbar-avatar is-initials" id="topbar-avatar" aria-hidden>AD</span>
+              <div class="topbar-user-copy">
+                <strong id="topbar-user-name">Signed in</strong>
+                <span id="topbar-user-role">Role</span>
+              </div>
+              <svg class="profile-menu-caret" width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <path d="m6 9 6 6 6-6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+            <div class="profile-menu-dropdown" id="profile-menu-dropdown" role="menu" hidden>
+              <div class="profile-menu-head">
+                <p class="profile-menu-name" id="profile-menu-name">Signed in</p>
+                <p class="profile-menu-role-pill" id="profile-menu-role">User</p>
+              </div>
+              <button type="button" class="profile-menu-item" role="menuitem" data-profile-nav="settings">Settings</button>
+              <button type="button" class="profile-menu-item" role="menuitem" data-profile-nav="revenue" id="profile-menu-revenue" hidden>Revenue</button>
+              <button type="button" class="profile-menu-item" role="menuitem" data-profile-nav="pricing">Pricing</button>
+              <form class="profile-menu-logout" action="/logout" method="post">
+                <button type="submit" class="profile-menu-item is-danger" role="menuitem">Sign out</button>
+              </form>
             </div>
           </div>
         </div>

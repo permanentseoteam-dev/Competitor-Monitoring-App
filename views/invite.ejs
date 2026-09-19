@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Accept invite · Permanent SEO</title>
+  <link rel="icon" href="/brand/icon.jpg" type="image/jpeg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="login-body">
+  <div class="login-shell">
+    <section class="login-panel reveal-in">
+      <div class="login-brand">
+        <strong class="login-brand-name">Permanent SEO</strong>
+      </div>
+      <p class="eyebrow">Team invite</p>
+      <h1>Join the workspace</h1>
+      <p class="lede">
+        You’re invited as <strong><%= roleLabel %></strong>.
+        Choose a username and password to finish setup.
+      </p>
+      <% if (typeof note === "string" && note) { %>
+        <p class="muted">Note: <%= note %></p>
+      <% } %>
+      <% if (error) { %>
+        <p class="error" role="alert"><%= error %></p>
+      <% } %>
+      <% if (invalid) { %>
+        <p class="error" role="alert"><%= invalid %></p>
+        <p class="muted"><a href="/login">Back to sign in</a></p>
+      <% } else { %>
+        <form class="add-form" method="post" action="/invite/<%= token %>">
+          <label>
+            Display name
+            <input name="displayName" type="text" placeholder="Your name" maxlength="80" />
+          </label>
+          <label>
+            Username
+            <input name="username" type="text" autocomplete="username" placeholder="Choose a username" required minlength="2" maxlength="120" autofocus />
+          </label>
+          <label>
+            Password
+            <input name="password" type="password" autocomplete="new-password" placeholder="At least 6 characters" required minlength="6" maxlength="200" />
+          </label>
+          <button type="submit" class="btn primary">Create account</button>
+        </form>
+        <p class="muted" style="margin-top:1rem">Already have an account? <a href="/login">Sign in</a></p>
+      <% } %>
+    </section>
+    <aside class="login-aside" aria-hidden="true">
+      <p>Accept your invite to start monitoring competitors with Permanent SEO.</p>
+    </aside>
+  </div>
+</body>
+</html>

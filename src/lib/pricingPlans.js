@@ -3,6 +3,7 @@
 const {
   formatCompetitorLimit,
   formatScrapeNowLimit,
+  formatSeatLimit,
   PLAN_LIMITS,
 } = require("./planLimits");
 
@@ -39,8 +40,16 @@ const FEATURE_SECTIONS = [
       { id: "upload", label: "Upload queue + 10-day recycle", basic: false, essential: true, advance: true },
       { id: "daily", label: "Daily 8am scrape schedule", basic: false, essential: true, advance: true },
       { id: "profiles", label: "Login profiles & roles", basic: false, essential: false, advance: true },
+      {
+        id: "seats",
+        label: "Team seats (invite users)",
+        basic: formatSeatLimit(PLAN_LIMITS.basic.seats),
+        essential: formatSeatLimit(PLAN_LIMITS.essential.seats),
+        advance: formatSeatLimit(PLAN_LIMITS.advance.seats),
+      },
       { id: "priority", label: "Priority scrape runs", basic: false, essential: false, advance: true },
-      { id: "admin", label: "Admin pricing & offer timer", basic: false, essential: false, advance: true },
+      { id: "admin", label: "Pricing offer timer controls", basic: false, essential: false, advance: true },
+      { id: "revenue", label: "Monthly revenue dashboard", basic: false, essential: false, advance: "Super Admin" },
     ],
   },
 ];
@@ -69,7 +78,7 @@ const PRICING_FAQS = [
   },
   {
     q: "Why upgrade from Basic?",
-    a: "Essential adds 4 competitor slots and 8 Scrape now runs per month, plus upload + recycle and daily automation. Advance unlocks unlimited competitors, 12 Scrape now runs, profiles/roles, and priority scrapes.",
+    a: "Essential adds 4 competitor slots and 8 Scrape now runs per month, plus upload + recycle and daily automation. Advance unlocks unlimited competitors, 12 Scrape now runs, profiles/roles, team seats, and priority scrapes. Super Admin unlocks the monthly revenue numbers dashboard.",
   },
   {
     q: "How does yearly billing work?",
