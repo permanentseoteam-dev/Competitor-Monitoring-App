@@ -3,6 +3,7 @@
 const express = require("express");
 const {
   listProducts,
+  getProductCounts,
   listRecentScrapeRuns,
   markProductNeedsUpload,
   restoreProduct,
@@ -23,11 +24,12 @@ router.get("/api/products", async (req, res, next) => {
       typeof req.query.view === "string" && PRODUCT_VIEWS.has(req.query.view)
         ? req.query.view
         : "active";
-    const [products, runs] = await Promise.all([
+    const [products, runs, counts] = await Promise.all([
       listProducts({ competitorId, view }),
       listRecentScrapeRuns(12),
+      getProductCounts(),
     ]);
-    res.json({ products, runs, view });
+    res.json({ products, runs, view, counts });
   } catch (error) {
     next(error);
   }

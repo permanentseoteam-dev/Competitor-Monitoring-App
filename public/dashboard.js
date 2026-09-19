@@ -3,6 +3,12 @@
     nav: "dashboard",
     competitors: [],
     products: [],
+    productCounts: {
+      active: 0,
+      needs_upload: 0,
+      recycle: 0,
+      total: 0,
+    },
     runs: [],
     settings: {
       dailyCronEnabled: true,
@@ -377,7 +383,7 @@
                     state.scraping || !canScrapeNow() ? "disabled" : ""
                   } title="${
                     canScrapeNow()
-                      ? `${scrapeNowLeft()} Scrape now left this month`
+                      ? escapeHtml(scrapeQuotaLabel())
                       : "Scrape now limit reached — upgrade for more"
                   }">Scrape</button>
                   <button type="button" class="btn danger-outline" data-action="delete">Remove</button>
@@ -458,9 +464,9 @@
         </div>
       </div>
       <div class="product-view-tabs" role="tablist" aria-label="Product lists">
-        <button type="button" class="product-view-tab ${view === "active" ? "active" : ""}" data-product-view="active">Active</button>
-        <button type="button" class="product-view-tab ${view === "needs_upload" ? "active" : ""}" data-product-view="needs_upload">Need to upload</button>
-        <button type="button" class="product-view-tab ${view === "recycle" ? "active" : ""}" data-product-view="recycle">Recycle bin</button>
+        <button type="button" class="product-view-tab ${view === "active" ? "active" : ""}" data-product-view="active">Active (${productCount("active")})</button>
+        <button type="button" class="product-view-tab ${view === "needs_upload" ? "active" : ""}" data-product-view="needs_upload">Need to upload (${productCount("needs_upload")})</button>
+        <button type="button" class="product-view-tab ${view === "recycle" ? "active" : ""}" data-product-view="recycle">Recycle bin (${productCount("recycle")})</button>
       </div>
       ${body}
     `;
@@ -583,40 +589,33 @@
           Number(r.newCount || 0) +
           Math.max(1, Math.round((r.urlsFound || 0) / 80)),
       );
-    const activeProducts = state.products.filter(
-      (p) => !p.deletedAt && p.isNew,
-    ).length;
-    const uploadProducts = state.products.filter(
-      (p) => !p.deletedAt && p.needsUpload,
-    ).length;
-    const recycleProducts = state.products.filter((p) => p.deletedAt).length;
+    const activeProducts = productCount("active");
+    const uploadProducts = productCount("needs_upload");
+    const recycleProducts = productCount("recycle");
     const donutParts = [
       {
         label: "Active new",
-        value:
-          Math.max(
-            activeProducts,
-            state.productView === "active" ? state.products.length : 0,
-          ) ||
-          state.products.filter((p) => !p.deletedAt).length ||
-          1,
+        value: Math.max(activeProducts, 0),
         color: "#2B59FF",
       },
       {
         label: "Need upload",
-        value: Math.max(uploadProducts, 1),
+        value: Math.max(uploadProducts, 0),
         color: "#4D78FF",
       },
       {
         label: "Recycle",
-        value:
-          Math.max(
-            recycleProducts,
-            state.productView === "recycle" ? state.products.length : 0,
-          ) || 1,
+        value: Math.max(recycleProducts, 0),
         color: "#152A5C",
       },
-    ];
+    ].filter((part) => part.value > 0);
+    if (!donutParts.length) {
+      donutParts.push({
+        label: "No products yet",
+        value: 1,
+        color: "#CBD5E1",
+      });
+    }
 
     const laneSparks = [
       [3, 5, 4, 7, 6, 9, 8],
@@ -702,8 +701,8 @@
             <span class="analytics-icon" aria-hidden>🆕</span>
             <div>
               <p class="analytics-label">New products</p>
-              <strong>${state.products.length}</strong>
-              <span class="metric-delta flat">Current view</span>
+              <strong>${productCount("active")}</strong>
+              <span class="metric-delta flat">${productCount("total")} live cards</span>
             </div>
           </div>
           <div class="analytics-item">
@@ -834,7 +833,6 @@
             </div>
             <button type="button" class="btn ghost" id="btn-cancel-add">Cancel</button>
           </div>
-          ${planUsageSummaryHtml()}
           ${
             addBlocked
               ? `<p class="plan-limit-banner" role="status">Competitor limit reached on your plan. <button type="button" class="linkish" data-open-pricing>Upgrade</button> to add more stores.</p>`
@@ -865,7 +863,6 @@
               <h2 class="section-title">Monitored stores</h2>
               <p class="panel-sub">${competitorsInRange().length} of ${state.competitors.length} competitors in range</p>
             </div>
-            ${planUsageSummaryHtml()}
             ${competitorRangeSelectHtml()}
           </div>
           ${competitorListHtml()}
@@ -1260,18 +1257,47 @@
     return scrapeNowLeft() > 0;
   }
 
-  function planUsageSummaryHtml() {
-    const cLimit = state.planUsage?.competitors?.limit ?? planLimitsFor().competitors;
-    const cUsed = state.planUsage?.competitors?.used ?? state.competitors.length;
-    const sLimit = state.planUsage?.scrapeNow?.limit ?? planLimitsFor().scrapeNow;
-    const sUsed = state.planUsage?.scrapeNow?.used ?? Number(state.settings.manualScrapeUsed || 0);
-    const cLabel = cLimit == null ? `${cUsed} / Unlimited` : `${cUsed} / ${cLimit}`;
-    return `
-      <p class="plan-usage-chip" title="Resets each calendar month (UTC)">
-        <span><strong>Competitors</strong> ${escapeHtml(cLabel)}</span>
-        <span><strong>Scrape now</strong> ${escapeHtml(String(sUsed))} / ${escapeHtml(String(sLimit))}</span>
-      </p>
-    `;
+  function enabledCompetitors() {
+    return state.competitors.filter((c) => c.enabled);
+  }
+
+  function enabledCompetitorCount() {
+    return enabledCompetitors().length;
+  }
+
+  function productCount(view) {
+    const counts = state.productCounts || {};
+    if (view === "needs_upload") return Number(counts.needs_upload || 0);
+    if (view === "recycle") return Number(counts.recycle || 0);
+    if (view === "total") return Number(counts.total || 0);
+    return Number(counts.active || 0);
+  }
+
+  function scrapeQuotaLabel() {
+    const left = scrapeNowLeft();
+    return left === 1
+      ? "1 scrape run left this month"
+      : `${left} scrape runs left this month`;
+  }
+
+  function scrapeAllButtonLabel() {
+    if (state.scraping) return "Scraping…";
+    if (!canScrapeNow()) return "Scrape limit reached";
+    const stores = enabledCompetitorCount();
+    if (!stores) return "Scrape All Now";
+    return stores === 1
+      ? "Scrape All Now (1 store)"
+      : `Scrape All Now (${stores} stores)`;
+  }
+
+  function scrapeAllButtonTitle() {
+    const stores = enabledCompetitorCount();
+    if (!canScrapeNow()) {
+      return "Monthly Scrape now limit reached — upgrade for more";
+    }
+    if (!stores) return "Add an enabled store to scrape";
+    const storeLabel = stores === 1 ? "1 store" : `${stores} stores`;
+    return `Scrapes ${storeLabel} · ${scrapeQuotaLabel()}`;
   }
 
   function promptPlanUpgrade(message) {
@@ -1309,7 +1335,25 @@
   function goToPricing() {
     state.nav = "pricing";
     render();
+    scrollPageToTop();
     void loadPricing().then(() => render());
+  }
+
+  function scrollPageToTop() {
+    const reduceMotion =
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    window.scrollTo({ top: 0, left: 0, behavior: reduceMotion ? "auto" : "smooth" });
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+    document.querySelector(".workspace")?.scrollTo?.({
+      top: 0,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
+    document.querySelector(".main-pane")?.scrollTo?.({
+      top: 0,
+      behavior: reduceMotion ? "auto" : "smooth",
+    });
   }
 
   function showUpgradeToast(message) {
@@ -1851,16 +1895,11 @@
     if (!scrapeBtn) return;
     const onCompetitors = state.nav === "competitors";
     const scrapeOk = canScrapeNow();
+    const stores = enabledCompetitorCount();
     scrapeBtn.hidden = !onCompetitors;
-    scrapeBtn.disabled = state.scraping || !state.competitors.length || !scrapeOk;
-    scrapeBtn.textContent = state.scraping
-      ? "Scraping…"
-      : scrapeOk
-        ? `Scrape All Now (${scrapeNowLeft()} left)`
-        : "Scrape limit reached";
-    scrapeBtn.title = scrapeOk
-      ? `${scrapeNowLeft()} Scrape now runs left this month`
-      : "Monthly Scrape now limit reached — upgrade for more";
+    scrapeBtn.disabled = state.scraping || !stores || !scrapeOk;
+    scrapeBtn.textContent = scrapeAllButtonLabel();
+    scrapeBtn.title = scrapeAllButtonTitle();
   }
 
   function render() {
@@ -1871,27 +1910,22 @@
     if (pageHeader) {
       pageHeader.hidden = state.nav === "dashboard";
     }
-    const monitorStatus = document.getElementById("topbar-monitor-status");
-    if (monitorStatus) {
-      const active = state.competitors.filter((c) => c.enabled).length;
-      monitorStatus.textContent =
-        active > 0 ? `${active} stores monitoring` : "No stores yet";
-      monitorStatus.classList.toggle("is-live", active > 0);
+    const mainPane = document.getElementById("main-content");
+    if (mainPane) {
+      mainPane.classList.toggle("is-dashboard", state.nav === "dashboard");
     }
     document.querySelectorAll(".nav-item").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.nav === state.nav);
-      btn.setAttribute(
-        "aria-current",
-        btn.dataset.nav === state.nav ? "page" : "false",
-      );
+      const on = btn.dataset.nav === state.nav;
+      btn.classList.toggle("active", on);
+      if (on) btn.setAttribute("aria-current", "page");
+      else btn.removeAttribute("aria-current");
     });
     const helpBtn = document.getElementById("help-centre-btn");
     if (helpBtn) {
-      helpBtn.classList.toggle("active", state.nav === "help");
-      helpBtn.setAttribute(
-        "aria-current",
-        state.nav === "help" ? "page" : "false",
-      );
+      const on = state.nav === "help";
+      helpBtn.classList.toggle("active", on);
+      if (on) helpBtn.setAttribute("aria-current", "page");
+      else helpBtn.removeAttribute("aria-current");
     }
     renderBanner();
     renderUpgradeNag();
@@ -2114,27 +2148,32 @@
           state.nav = "competitors";
           state.showAddForm = true;
           render();
+          scrollPageToTop();
           return;
         }
         if (action === "products") {
           state.nav = "products";
           render();
+          scrollPageToTop();
           return;
         }
         if (action === "help") {
           state.nav = "help";
           state.helpOption = "ticket";
           render();
+          scrollPageToTop();
           return;
         }
         if (action === "settings") {
           state.nav = "settings";
           render();
+          scrollPageToTop();
           return;
         }
         if (action === "runs") {
           state.nav = "runs";
           render();
+          scrollPageToTop();
           return;
         }
         if (action === "pricing") {
@@ -2225,13 +2264,19 @@
     try {
       const [cRes, pRes, sRes, profilesRes, meRes] = await Promise.all([
         apiFetch("/api/competitors"),
-        apiFetch(
-          `/api/products?view=${encodeURIComponent(state.productView || "active")}${
-            state.filterCompetitorId !== "all"
-              ? `&competitorId=${encodeURIComponent(state.filterCompetitorId)}`
-              : ""
-          }`,
-        ),
+        apiFetch((() => {
+          const onProducts = state.nav === "products";
+          const view = onProducts ? state.productView || "active" : "active";
+          const competitorId =
+            onProducts && state.filterCompetitorId !== "all"
+              ? state.filterCompetitorId
+              : null;
+          let url = `/api/products?view=${encodeURIComponent(view)}`;
+          if (competitorId) {
+            url += `&competitorId=${encodeURIComponent(competitorId)}`;
+          }
+          return url;
+        })()),
         apiFetch("/api/settings"),
         apiFetch("/api/profiles"),
         apiFetch("/api/me"),
@@ -2242,6 +2287,22 @@
       state.competitors = cJson.competitors || [];
       state.products = pJson.products || [];
       state.runs = pJson.runs || [];
+      if (pJson.counts && typeof pJson.counts === "object") {
+        state.productCounts = {
+          active: Number(pJson.counts.active || 0),
+          needs_upload: Number(pJson.counts.needs_upload || 0),
+          recycle: Number(pJson.counts.recycle || 0),
+          total: Number(pJson.counts.total || 0),
+        };
+      } else {
+        const n = state.products.length;
+        const next = { ...state.productCounts };
+        if (state.productView === "needs_upload") next.needs_upload = n;
+        else if (state.productView === "recycle") next.recycle = n;
+        else next.active = n;
+        next.total = next.active + next.needs_upload;
+        state.productCounts = next;
+      }
       if (cJson.planUsage) applyPlanUsage(cJson.planUsage);
       if (pJson.view) state.productView = pJson.view;
       if (sRes.ok) {
@@ -2661,6 +2722,7 @@
     if (state.nav === "help") state.helpOption = "ticket";
     maybeNagOnNav();
     render();
+    scrollPageToTop();
     if (state.nav === "pricing") void loadPricing().then(() => render());
   });
 
@@ -2668,6 +2730,7 @@
     state.nav = "help";
     state.helpOption = "ticket";
     render();
+    scrollPageToTop();
   });
 
   document.getElementById("sidebar-upgrade-cta")?.addEventListener("click", () => {
@@ -2686,10 +2749,12 @@
     if (competitor) {
       state.nav = "competitors";
       render();
+      scrollPageToTop();
       return;
     }
     state.nav = "products";
     render();
+    scrollPageToTop();
   });
 
   document.getElementById("btn-new-competitor")?.addEventListener("click", () => {

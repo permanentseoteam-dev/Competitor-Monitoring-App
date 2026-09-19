@@ -464,6 +464,20 @@ async function listProducts(filters = {}) {
     });
 }
 
+async function getProductCounts(competitorId) {
+  const store = await readStore();
+  let rows = store.products;
+  if (competitorId) {
+    rows = rows.filter((p) => p.competitorId === competitorId);
+  }
+  return {
+    active: rows.filter((p) => !p.deletedAt && !p.needsUpload && p.isNew).length,
+    needs_upload: rows.filter((p) => !p.deletedAt && p.needsUpload).length,
+    recycle: rows.filter((p) => Boolean(p.deletedAt)).length,
+    total: rows.filter((p) => !p.deletedAt).length,
+  };
+}
+
 async function markProductNeedsUpload(id) {
   return mutateStore((store) => {
     const product = store.products.find((p) => p.id === id);
@@ -773,6 +787,7 @@ module.exports = {
   getExistingProductUrls,
   insertProducts,
   listProducts,
+  getProductCounts,
   markProductNeedsUpload,
   softDeleteProduct,
   restoreProduct,
