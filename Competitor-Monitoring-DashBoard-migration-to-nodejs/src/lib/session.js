@@ -1,12 +1,20 @@
 "use strict";
 
-const { SignJWT, jwtVerify } = require("jose");
 const { normalizeRole } = require("./roles");
 
 const SESSION_COOKIE = "session";
 const DEFAULT_SESSION_SECRET =
   "competitor-monitor-local-session-secret-key-32";
 const SESSION_DURATION_MS = 7 * 24 * 60 * 60 * 1000;
+
+// Dynamic import cache
+let joseModule = null;
+async function getJose() {
+  if (!joseModule) {
+    joseModule = await import("jose");
+  }
+  return joseModule;
+}
 
 function getSecretKey() {
   const secret = process.env.SESSION_SECRET || DEFAULT_SESSION_SECRET;
@@ -34,6 +42,7 @@ async function encrypt(payload) {
   if (!secretKey) {
     throw new Error("SESSION_SECRET must be set to at least 32 characters.");
   }
+  const { SignJWT } = await getJose();
   return new SignJWT(payload)
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
@@ -45,6 +54,7 @@ async function decrypt(session) {
   const secretKey = getSecretKey();
   if (!session || !secretKey) return null;
   try {
+    const { jwtVerify } = await getJose();
     const { payload } = await jwtVerify(session, secretKey, {
       algorithms: ["HS256"],
     });
