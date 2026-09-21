@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Sign in · Permanent SEO</title>
+  <link rel="icon" href="/brand/icon.jpg" type="image/jpeg" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/css/styles.css" />
+</head>
+<body class="login-body">
+  <div class="login-shell">
+    <section class="login-panel reveal-in">
+      <div class="login-brand">
+        <strong class="login-brand-name">Permanent SEO</strong>
+      </div>
+      <p class="eyebrow">Secure access</p>
+      <h1>Welcome back</h1>
+      <p class="lede">Sign in to monitor competitors, catch new products, and run scrapes.</p>
+      <% if (error) { %>
+        <p class="error" role="alert"><%= error %></p>
+      <% } %>
+      <form class="add-form" method="post" action="/login">
+        <label>
+          Username
+          <input name="username" type="text" autocomplete="username" placeholder="Your username" required maxlength="120" autofocus />
+        </label>
+        <label>
+          Password
+          <input name="password" type="password" autocomplete="current-password" placeholder="Your password" required maxlength="200" />
+        </label>
+        <button type="submit" class="btn primary">Sign in</button>
+      </form>
+    </section>
+    <aside class="login-aside" aria-hidden="true">
+      <p>Growth-focused competitor intel for Permanent SEO teams.</p>
+    </aside>
+  </div>
+</body>
+</html>
