@@ -70,6 +70,7 @@
     pricingFaqs: null,
     yearlyDiscount: 0.1,
     pricingTimerId: null,
+    showTimerEditor: false,
     choosingPlan: false,
     helpOption: "ticket",
     competitorRange: "7d",
@@ -760,11 +761,11 @@
     ];
     const planName = planDisplayName();
     const cUsed = state.planUsage?.competitors?.used ?? state.competitors.length;
-    const cLimit = state.planUsage?.competitors?.limit;
+    const cLimit = isSuperAdmin() ? null : state.planUsage?.competitors?.limit;
     const laneCount =
       cLimit == null
         ? Math.min(6, Math.max(3, state.competitors.length + 1))
-        : Math.max(state.competitors.length, Math.min(Number(cLimit) || 0, 6));
+        : Math.min(6, Math.max(state.competitors.length + 1, Number(cLimit) || 0));
     const canOpenSlot = canAddCompetitor();
     const lanes = Array.from({ length: Math.max(laneCount, 1) }, (_, i) => {
       const c = state.competitors[i];
@@ -1042,7 +1043,7 @@
                   Number.isFinite(slotsLeft)
                     ? `${slotsLeft} competitor slot${slotsLeft === 1 ? "" : "s"} left`
                     : "Unlimited competitor slots"
-                } · ${scrapeLeft} Scrape now left this month</p>`
+                } · ${Number.isFinite(scrapeLeft) ? `${scrapeLeft} Scrape now left this month` : "Unlimited Scrape now"}</p>`
           }
           <form class="add-form" id="add-form">
             <label>Name<input name="name" value="${escapeHtml(state.form.name)}" placeholder="Acme Store" required ${addBlocked ? "disabled" : ""} /></label>
@@ -1276,7 +1277,7 @@
         <section class="panel-card">
           <h2 class="section-title">Team members</h2>
           <p class="panel-sub">
-            Seats on your plan: <strong>${escapeHtml(seatUsageLabel())}</strong>
+            Seats on your plan: <strong id="team-seats-usage">${escapeHtml(seatUsageLabel())}</strong>
             ${
               state.planUsage?.seats && !state.planUsage.seats.unlimited
                 ? ` · pending invites count toward the limit`
@@ -1714,6 +1715,20 @@
     return state.billingCycle === "yearly" ? "/mo · billed yearly" : "/month";
   }
 
+  function formatDatetimeLocal(isoString) {
+    let d = isoString ? new Date(isoString) : null;
+    if (!d || Number.isNaN(d.getTime())) {
+      d = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    }
+    const pad = (n) => String(n).padStart(2, "0");
+    const year = d.getFullYear();
+    const month = pad(d.getMonth() + 1);
+    const day = pad(d.getDate());
+    const hours = pad(d.getHours());
+    const minutes = pad(d.getMinutes());
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
+  }
+
   function formatCountdown(ms) {
     if (ms <= 0) return { d: "00", h: "00", m: "00", s: "00", expired: true };
     const total = Math.floor(ms / 1000);
@@ -1774,6 +1789,7 @@
   }
 
   function competitorSlotsLeft() {
+    if (isSuperAdmin()) return Infinity;
     const usage = state.planUsage?.competitors;
     if (usage) {
       if (usage.unlimited) return Infinity;
@@ -1785,10 +1801,12 @@
   }
 
   function canAddCompetitor() {
+    if (isSuperAdmin()) return true;
     return competitorSlotsLeft() > 0;
   }
 
   function scrapeNowLeft() {
+    if (isSuperAdmin()) return Infinity;
     const usage = state.planUsage?.scrapeNow;
     if (usage) return Number(usage.remaining ?? 0);
     const limit = planLimitsFor().scrapeNow;
@@ -1797,6 +1815,7 @@
   }
 
   function canScrapeNow() {
+    if (isSuperAdmin()) return true;
     return scrapeNowLeft() > 0;
   }
 
@@ -3366,29 +3385,155 @@
     }
   }
 
+  function showInlineInviteError(msg) {
+    let errEl = document.getElementById("invite-card-error");
+    if (!errEl) {
+      errEl = document.createElement("p");
+      errEl.className = "error invite-card-error";
+      errEl.id = "invite-card-error";
+      errEl.style.marginBottom = "var(--space-3)";
+      const form = document.getElementById("generate-invite-form");
+      if (form && form.parentNode) {
+        form.parentNode.insertBefore(errEl, form);
+      }
+    }
+    if (errEl) {
+      errEl.textContent = msg;
+    }
+  }
+
+  function removeInlineInviteError() {
+    const errEl = document.getElementById("invite-card-error");
+    if (errEl) errEl.remove();
+  }
+
+  function updateSeatsCounterInPlace() {
+    const seatEl = document.getElementById("team-seats-usage");
+    if (seatEl) {
+      seatEl.textContent = seatUsageLabel();
+    }
+  }
+
+  function renderPendingInvitesHtml(invites) {
+    if (!invites || !invites.length) {
+      return `<p class="muted">No pending invites yet.</p>`;
+    }
+    return invites
+      .map(
+        (inv) => `
+        <article class="competitor-row invite-row" data-invite-id="${escapeHtml(inv.id)}">
+          <div>
+            <strong>${escapeHtml(formatRoleLabel(inv.role))} invite</strong>
+            <p class="muted">
+              ${inv.note ? `${escapeHtml(inv.note)} · ` : ""}expires ${escapeHtml(formatWhen(inv.expiresAt))}
+            </p>
+            <code class="invite-token-chip">${escapeHtml(inv.token.slice(0, 8))}…</code>
+          </div>
+          <div class="profile-row-actions">
+            <button type="button" class="btn ghost" data-invite-action="copy">Copy link</button>
+            <button type="button" class="btn danger-outline" data-invite-action="revoke">Revoke</button>
+          </div>
+        </article>
+      `,
+      )
+      .join("");
+  }
+
+  function bindPendingInvitesEvents(container) {
+    if (!container) return;
+    container.querySelectorAll("[data-invite-id]").forEach((row) => {
+      const id = row.getAttribute("data-invite-id");
+      row
+        .querySelector('[data-invite-action="copy"]')
+        ?.addEventListener("click", () => {
+          const inv = state.invites.find((i) => i.id === id);
+          if (!inv) return;
+          void copyText(`${window.location.origin}/invite/${inv.token}`);
+        });
+      row
+        .querySelector('[data-invite-action="revoke"]')
+        ?.addEventListener("click", () => void onRevokeInvite(id));
+    });
+  }
+
+  function updateInviteSectionInPlace(newInvite, inviteUrl) {
+    const noteInput = document.getElementById("invite-note-input");
+    if (noteInput) noteInput.value = "";
+
+    if (inviteUrl) {
+      let box = document.getElementById("invite-link-box");
+      if (!box) {
+        box = document.createElement("div");
+        box.className = "invite-link-box";
+        box.id = "invite-link-box";
+        box.innerHTML = `
+          <p class="invite-link-label">Latest invite link</p>
+          <div class="invite-link-row">
+            <input type="text" readonly value="${escapeHtml(inviteUrl)}" id="invite-link-input" />
+            <button type="button" class="btn ghost" id="copy-invite-link">Copy</button>
+          </div>
+          <p class="muted">Share this link securely. It works once.</p>
+        `;
+        const form = document.getElementById("generate-invite-form");
+        if (form && form.parentNode) {
+          form.parentNode.insertBefore(box, form.nextSibling);
+        }
+        const copyBtn = box.querySelector("#copy-invite-link");
+        if (copyBtn) {
+          copyBtn.onclick = () => {
+            void copyText(state.lastInviteUrl || inviteUrl);
+          };
+        }
+      } else {
+        const input = box.querySelector("#invite-link-input");
+        if (input) input.value = inviteUrl;
+      }
+    }
+
+    const pendingWrap = document.querySelector("#invite-user-section .pending-invites");
+    if (pendingWrap) {
+      pendingWrap.innerHTML = `
+        <h3 class="invite-list-title">Pending invites</h3>
+        ${renderPendingInvitesHtml(state.invites)}
+      `;
+      bindPendingInvitesEvents(pendingWrap);
+    }
+  }
+
   async function copyText(text) {
     const value = String(text || "");
     if (!value) return;
+    let copied = false;
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value);
-      } else {
-        const input = document.createElement("textarea");
-        input.value = value;
-        document.body.appendChild(input);
-        input.select();
-        document.execCommand("copy");
-        input.remove();
-      }
-      if (upgradeToast) {
-        upgradeToast.hidden = false;
-        upgradeToast.textContent = "Invite link copied";
-        setTimeout(() => {
-          upgradeToast.hidden = true;
-        }, 1800);
+        copied = true;
       }
     } catch {
-      setError("Could not copy invite link");
+      /* Fallback to execCommand */
+    }
+    if (!copied) {
+      try {
+        const input = document.createElement("textarea");
+        input.value = value;
+        input.setAttribute("readonly", "");
+        input.style.position = "fixed";
+        input.style.opacity = "0";
+        input.style.pointerEvents = "none";
+        document.body.appendChild(input);
+        input.select();
+        copied = document.execCommand("copy");
+        input.remove();
+      } catch {
+        copied = false;
+      }
+    }
+    if (copied && upgradeToast) {
+      upgradeToast.hidden = false;
+      upgradeToast.textContent = "Invite link copied to clipboard";
+      setTimeout(() => {
+        upgradeToast.hidden = true;
+      }, 2000);
     }
   }
 
@@ -3396,22 +3541,20 @@
     if (!isPlanAdmin() || state.generatingInvite) return;
     if (!canInviteMoreUsers()) {
       state.inviteError = "Seat limit reached on your plan. Upgrade or revoke a pending invite to invite more users.";
-      render();
+      showInlineInviteError(state.inviteError);
       return;
     }
 
     state.generatingInvite = true;
     state.inviteError = "";
+    removeInlineInviteError();
 
-    // Smooth inline button state: update in-place without tearing down DOM or wiping user inputs
     const btn = document.getElementById("generate-invite-btn") ||
       document.querySelector("#generate-invite-form button[type='submit']");
     if (btn) {
       btn.disabled = true;
-      btn.textContent = "Generating…";
+      btn.innerHTML = '<span class="btn-spinner" aria-hidden="true"></span><span>Generating…</span>';
     }
-    const inlineErr = document.getElementById("invite-card-error");
-    if (inlineErr) inlineErr.remove();
 
     let inviteUrl = "";
     try {
@@ -3435,7 +3578,11 @@
         ];
       }
 
-      // Background sync fresh profiles and usage without tearing down view
+      // Smooth in-place DOM update (no full-page destruction / fluctuation)
+      updateInviteSectionInPlace(json.invite, inviteUrl);
+      updateSeatsCounterInPlace();
+
+      // Background sync profiles without tearing down view
       try {
         const pRes = await apiFetch("/api/profiles");
         if (pRes.ok) {
@@ -3443,34 +3590,26 @@
           if (pJson.invites) state.invites = pJson.invites;
           if (pJson.profiles) state.profiles = pJson.profiles;
           if (pJson.planUsage) applyPlanUsage(pJson.planUsage);
+          updateSeatsCounterInPlace();
         }
       } catch {
         /* ignore background refresh */
       }
 
-      state.generatingInvite = false;
-      render();
-
       if (inviteUrl) {
         void copyText(inviteUrl);
-        requestAnimationFrame(() => {
-          document.getElementById("invite-link-box")?.scrollIntoView({
-            behavior: "smooth",
-            block: "nearest",
-          });
-        });
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Could not generate invite";
       state.inviteError = msg;
-      state.generatingInvite = false;
-      render();
+      showInlineInviteError(msg);
     } finally {
       state.generatingInvite = false;
       const finalBtn = document.getElementById("generate-invite-btn");
       if (finalBtn) {
-        finalBtn.disabled = !canInviteMoreUsers();
-        finalBtn.textContent = canInviteMoreUsers() ? "Generate invite link" : "Seat limit reached";
+        const canInvite = canInviteMoreUsers();
+        finalBtn.disabled = !canInvite;
+        finalBtn.innerHTML = canInvite ? "Generate invite link" : "Seat limit reached";
       }
     }
   }
@@ -3479,6 +3618,7 @@
     if (!id || !window.confirm("Revoke this invite link?")) return;
     setError(null);
     state.inviteError = "";
+    removeInlineInviteError();
     try {
       const res = await apiFetch("/api/invites", {
         method: "DELETE",
@@ -3490,41 +3630,29 @@
       if (!res.ok) throw new Error(json.error || "Could not revoke invite");
       if (state.lastInviteUrl && state.invites.some((i) => i.id === id)) {
         state.lastInviteUrl = "";
+        document.getElementById("invite-link-box")?.remove();
       }
       state.invites = (state.invites || []).filter((i) => i.id !== id);
-      render();
+
+      const pendingWrap = document.querySelector("#invite-user-section .pending-invites");
+      if (pendingWrap) {
+        pendingWrap.innerHTML = `
+          <h3 class="invite-list-title">Pending invites</h3>
+          ${renderPendingInvitesHtml(state.invites)}
+        `;
+        bindPendingInvitesEvents(pendingWrap);
+      }
+      updateSeatsCounterInPlace();
+
+      const btn = document.getElementById("generate-invite-btn");
+      if (btn) {
+        const canInvite = canInviteMoreUsers();
+        btn.disabled = !canInvite;
+        btn.innerHTML = canInvite ? "Generate invite link" : "Seat limit reached";
+      }
     } catch (err) {
       state.inviteError = err instanceof Error ? err.message : "Could not revoke invite";
-      render();
-    }
-  }
-
-  async function onAddAdmin(input) {
-    if (!isSuperAdmin()) return;
-    state.savingProfile = true;
-    setError(null);
-    render();
-    try {
-      const res = await apiFetch("/api/invites", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          displayName: input.displayName,
-          username: input.username,
-          password: input.password,
-          role: "admin",
-        }),
-      });
-      const json = await readJson(res);
-      if (json.planUsage) applyPlanUsage(json.planUsage);
-      if (!res.ok) throw new Error(json.error || "Could not add admin");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not add admin");
-      state.savingProfile = false;
-      render();
-    } finally {
-      state.savingProfile = false;
+      showInlineInviteError(state.inviteError);
     }
   }
 

@@ -11,7 +11,7 @@ const {
 } = require("../lib/pricingPlans");
 const { getSettings, updateSettings, getPlanUsage } = require("../lib/db");
 const { PLAN_LIMITS } = require("../lib/planLimits");
-const { isPrivilegedRole } = require("../lib/roles");
+const { isPrivilegedRole, isSuperAdminRole } = require("../lib/roles");
 const { normalizeSubscriptionPlan } = require("../lib/types");
 
 const router = express.Router();
@@ -23,10 +23,23 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
-router.get("/api/pricing", async (_req, res, next) => {
+router.get("/api/pricing", async (req, res, next) => {
   try {
     const settings = await getSettings();
     const planUsage = await getPlanUsage();
+    const isSuperAdmin = isSuperAdminRole(req.session?.role);
+    const effectiveUsage =
+      isSuperAdmin && planUsage?.competitors
+        ? {
+            ...planUsage,
+            competitors: {
+              ...planUsage.competitors,
+              unlimited: true,
+              limit: null,
+              remaining: null,
+            },
+          }
+        : planUsage;
     res.json({
       plans: pricingPlans,
       featureSections: FEATURE_SECTIONS,
@@ -37,7 +50,7 @@ router.get("/api/pricing", async (_req, res, next) => {
       offerEndsAt: settings.pricingOfferEndsAt,
       subscriptionPlan: settings.subscriptionPlan || "basic",
       planLimits: PLAN_LIMITS,
-      planUsage,
+      planUsage: effectiveUsage,
     });
   } catch (error) {
     next(error);

@@ -17,6 +17,7 @@ const {
   formatCompetitorLimit,
   getPlanLimits,
 } = require("../lib/planLimits");
+const { isSuperAdminRole } = require("../lib/roles");
 
 const router = express.Router();
 
@@ -28,10 +29,23 @@ const createSchema = z.object({
     .refine((n) => isIntervalHours(n)),
 });
 
-router.get("/api/competitors", async (_req, res, next) => {
+router.get("/api/competitors", async (req, res, next) => {
   try {
     const { competitors, settings, planUsage } = await getMonitorSnapshot();
-    res.json({ competitors, settings, planUsage });
+    const isSuperAdmin = isSuperAdminRole(req.session?.role);
+    const effectiveUsage =
+      isSuperAdmin && planUsage?.competitors
+        ? {
+            ...planUsage,
+            competitors: {
+              ...planUsage.competitors,
+              unlimited: true,
+              limit: null,
+              remaining: null,
+            },
+          }
+        : planUsage;
+    res.json({ competitors, settings, planUsage: effectiveUsage });
   } catch (error) {
     next(error);
   }
@@ -50,8 +64,9 @@ router.post("/api/competitors", async (req, res, next) => {
     const snapshot = await getMonitorSnapshot();
     const plan = snapshot.settings.subscriptionPlan || "basic";
     const limits = getPlanLimits(plan);
+    const isSuperAdmin = isSuperAdminRole(req.session?.role);
 
-    if (competitorLimitReached(plan, snapshot.competitors.length)) {
+    if (!isSuperAdmin && competitorLimitReached(plan, snapshot.competitors.length)) {
       return res.status(403).json({
         error: `Competitor limit reached (${formatCompetitorLimit(
           limits.competitors,
@@ -68,7 +83,18 @@ router.post("/api/competitors", async (req, res, next) => {
       });
     });
 
-    const planUsage = await getPlanUsage();
+    let planUsage = await getPlanUsage();
+    if (isSuperAdmin && planUsage?.competitors) {
+      planUsage = {
+        ...planUsage,
+        competitors: {
+          ...planUsage.competitors,
+          unlimited: true,
+          limit: null,
+          remaining: null,
+        },
+      };
+    }
     return res.status(201).json({ competitor, planUsage });
   } catch (error) {
     next(error);
@@ -109,7 +135,18 @@ router.delete("/api/competitors", async (req, res, next) => {
     }
     const ok = await deleteCompetitor(id);
     if (!ok) return res.status(404).json({ error: "Not found" });
-    const planUsage = await getPlanUsage();
+    let planUsage = await getPlanUsage();
+    if (isSuperAdminRole(req.session?.role) && planUsage?.competitors) {
+      planUsage = {
+        ...planUsage,
+        competitors: {
+          ...planUsage.competitors,
+          unlimited: true,
+          limit: null,
+          remaining: null,
+        },
+      };
+    }
     return res.json({ ok: true, planUsage });
   } catch (error) {
     next(error);

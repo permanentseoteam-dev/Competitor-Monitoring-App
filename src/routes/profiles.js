@@ -53,6 +53,31 @@ function defaultEmojiForRole(role) {
   return "👔";
 }
 
+function getEffectivePlanUsage(planUsage, role) {
+  if (isSuperAdminRole(role) && planUsage) {
+    return {
+      ...planUsage,
+      competitors: planUsage.competitors
+        ? {
+            ...planUsage.competitors,
+            unlimited: true,
+            limit: null,
+            remaining: null,
+          }
+        : planUsage.competitors,
+      seats: planUsage.seats
+        ? {
+            ...planUsage.seats,
+            unlimited: true,
+            limit: null,
+            remaining: null,
+          }
+        : planUsage.seats,
+    };
+  }
+  return planUsage;
+}
+
 function requirePlanAdmin(req, res, next) {
   if (!isPlanAdminRole(req.session?.role)) {
     return res.status(403).json({ error: "Admin only" });
@@ -67,7 +92,7 @@ function requireSuperAdmin(req, res, next) {
   return next();
 }
 
-router.get("/api/profiles", requirePlanAdmin, async (_req, res, next) => {
+router.get("/api/profiles", requirePlanAdmin, async (req, res, next) => {
   try {
     const [profiles, planUsage, invites] = await Promise.all([
       listProfiles(),
@@ -78,7 +103,7 @@ router.get("/api/profiles", requirePlanAdmin, async (_req, res, next) => {
       profiles,
       invites: invites.filter((inv) => inv.status === "pending"),
       avatarEmojis: AVATAR_EMOJIS,
-      planUsage,
+      planUsage: getEffectivePlanUsage(planUsage, req.session?.role),
     });
   } catch (error) {
     next(error);
@@ -161,7 +186,7 @@ router.post("/api/profiles", requirePlanAdmin, async (req, res, next) => {
       enforceSeatLimit,
     });
     const planUsage = await getPlanUsage();
-    return res.status(201).json({ profile, planUsage });
+    return res.status(201).json({ profile, planUsage: getEffectivePlanUsage(planUsage, req.session?.role) });
   } catch (error) {
     if (error?.code === "SEAT_LIMIT") {
       return res.status(403).json({
@@ -179,7 +204,7 @@ router.get("/api/invites", requirePlanAdmin, async (_req, res, next) => {
     const [invites, planUsage] = await Promise.all([listInvites(), getPlanUsage()]);
     res.json({
       invites: invites.filter((inv) => inv.status === "pending"),
-      planUsage,
+      planUsage: getEffectivePlanUsage(planUsage, req.session?.role),
     });
   } catch (error) {
     next(error);
@@ -264,7 +289,7 @@ router.post("/api/invites", requirePlanAdmin, async (req, res, next) => {
       enforceSeatLimit: actorRole !== "super-admin",
     });
     const planUsage = await getPlanUsage();
-    return res.status(201).json({ profile, planUsage });
+    return res.status(201).json({ profile, planUsage: getEffectivePlanUsage(planUsage, req.session?.role) });
   } catch (error) {
     if (error?.code === "SEAT_LIMIT") {
       return res.status(403).json({
@@ -289,7 +314,7 @@ router.delete("/api/invites", requirePlanAdmin, async (req, res, next) => {
     const ok = await revokeInvite(id);
     if (!ok) return res.status(404).json({ error: "Not found" });
     const planUsage = await getPlanUsage();
-    return res.json({ ok: true, planUsage });
+    return res.json({ ok: true, planUsage: getEffectivePlanUsage(planUsage, req.session?.role) });
   } catch (error) {
     return res.status(400).json({ error: error.message || "Could not revoke invite" });
   }
@@ -402,7 +427,7 @@ router.delete("/api/profiles", requirePlanAdmin, async (req, res, next) => {
     const ok = await deleteProfile(id);
     if (!ok) return res.status(404).json({ error: "Not found" });
     const planUsage = await getPlanUsage();
-    return res.json({ ok: true, planUsage });
+    return res.json({ ok: true, planUsage: getEffectivePlanUsage(planUsage, req.session?.role) });
   } catch (error) {
     return res.status(400).json({ error: error.message || "Could not delete profile" });
   }

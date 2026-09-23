@@ -1351,6 +1351,117 @@ button {
   color: var(--danger, #b91c1c);
 }
 
+
+.pricing-timer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.pricing-timer-editor {
+  width: 100%;
+  margin-top: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--card);
+  border: 1px solid var(--line-subtle);
+  border-radius: 12px;
+  box-shadow: var(--shadow-md, var(--shadow));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: left;
+}
+
+.timer-editor-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid var(--line-subtle);
+  padding-bottom: var(--space-2);
+}
+
+.timer-editor-header strong {
+  font-size: var(--text-sm);
+  color: var(--ink);
+}
+
+.timer-editor-close {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.timer-editor-close:hover {
+  color: var(--ink);
+}
+
+.timer-sub-label {
+  display: block;
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-semibold);
+  color: var(--muted);
+  margin-bottom: var(--space-1);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.timer-preset-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.timer-chip {
+  background: rgba(43, 89, 255, 0.08);
+  color: var(--accent);
+  border: 1px solid rgba(43, 89, 255, 0.2);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: var(--weight-medium, 500);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.timer-chip:hover {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+
+.timer-custom-form {
+  display: flex;
+  flex-direction: column;
+}
+
+.timer-custom-row {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.timer-datetime-input {
+  flex: 1;
+  padding: 6px 10px;
+  font-size: var(--text-sm);
+  border: 1px solid var(--line-subtle);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.timer-datetime-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(43, 89, 255, 0.2);
+}
+
 .pricing-toolbar {
   display: flex;
   flex-direction: column;
@@ -1390,7 +1501,7 @@ button {
 
 .pricing-term {
   width: 100%;
-  max-width: 15rem;
+  max-width: 11.5rem;
 }
 
 .pricing-term select {
@@ -1399,12 +1510,14 @@ button {
   border-radius: 999px;
   border: 1px solid var(--line);
   background-color: var(--card);
-  padding: 0.55rem 2rem 0.55rem 1rem;
-  font-size: var(--text-sm);
+  padding: 0.45rem 1.6rem 0.45rem 0.75rem;
+  font-size: 0.8125rem;
   font-weight: var(--weight-semibold);
   color: var(--ink);
   cursor: pointer;
   text-align-last: center;
+  background-position: right 10px center;
+  background-size: 13px;
 }
 
 .visually-hidden {
@@ -5344,12 +5457,36 @@ button.linkish {
   margin-bottom: var(--space-4);
 }
 
+.invite-generate-form .btn {
+  min-width: 14rem;
+  justify-content: center;
+  gap: 8px;
+  transition: all 0.18s var(--ease);
+}
+
+.btn-spinner {
+  display: inline-block;
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: btn-spin 0.65s linear infinite;
+  flex-shrink: 0;
+  vertical-align: middle;
+}
+
+@keyframes btn-spin {
+  to { transform: rotate(360deg); }
+}
+
 .invite-link-box {
   margin: var(--space-4) 0;
   padding: var(--space-4);
   border: 1px solid var(--line-subtle);
   border-radius: var(--radius);
   background: #f8fafc;
+  animation: rise-in 0.25s var(--ease) both;
 }
 
 .invite-link-label {
