@@ -1390,7 +1390,7 @@ button {
 
 .pricing-term {
   width: 100%;
-  max-width: 24rem;
+  max-width: 15rem;
 }
 
 .pricing-term select {
@@ -1398,11 +1398,13 @@ button {
   min-width: 0;
   border-radius: 999px;
   border: 1px solid var(--line);
-  background: var(--card);
-  padding: 0.65rem 1rem;
+  background-color: var(--card);
+  padding: 0.55rem 2rem 0.55rem 1rem;
   font-size: var(--text-sm);
   font-weight: var(--weight-semibold);
   color: var(--ink);
+  cursor: pointer;
+  text-align-last: center;
 }
 
 .visually-hidden {
