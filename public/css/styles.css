@@ -4171,6 +4171,29 @@ button.channel-card:hover {
   display: grid;
   gap: 12px;
   animation: rise-in 0.5s var(--ease) both;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), box-shadow 0.18s var(--ease), transform 0.18s var(--ease);
+}
+
+.lane-card:hover,
+.lane-card:focus-visible {
+  border-color: color-mix(in srgb, var(--structure-30) 45%, var(--line-subtle));
+  box-shadow: var(--shadow), 0 0 0 3px color-mix(in srgb, var(--structure-30) 16%, transparent);
+  outline: none;
+  transform: translateY(-1px);
+}
+
+.lane-card.is-empty {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--card) 88%, var(--structure-30));
+}
+
+.lane-card.is-locked {
+  opacity: 0.78;
 }
 
 .lane-card-top {

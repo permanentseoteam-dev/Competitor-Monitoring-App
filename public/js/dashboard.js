@@ -753,23 +753,42 @@
       [3, 5, 4, 7, 6, 9, 8],
       [2, 3, 6, 5, 8, 7, 10],
       [4, 4, 5, 6, 7, 8, 9],
+      [3, 4, 6, 5, 7, 8, 9],
+      [2, 4, 5, 7, 6, 8, 10],
+      [4, 5, 5, 6, 8, 7, 9],
     ];
-    const lanes = [0, 1, 2].map((i) => {
-      const c = state.competitors[i];
-      return {
-        title: c?.name || (i === 0 ? "Add a store" : "Open slot"),
-        meta: c
-          ? `Next ${formatWhen(c.nextScrapeAt)}`
-          : "No competitor yet",
-        live: Boolean(c?.enabled),
-        spark: laneSparks[i],
-        stroke: ["#2B59FF", "#1A3FD9", "#60A5FA"][i],
-      };
-    });
-
     const planName = planDisplayName();
     const cUsed = state.planUsage?.competitors?.used ?? state.competitors.length;
     const cLimit = state.planUsage?.competitors?.limit;
+    const laneCount =
+      cLimit == null
+        ? Math.min(6, Math.max(3, state.competitors.length + 1))
+        : Math.max(state.competitors.length, Math.min(Number(cLimit) || 0, 6));
+    const canOpenSlot = canAddCompetitor();
+    const lanes = Array.from({ length: Math.max(laneCount, 1) }, (_, i) => {
+      const c = state.competitors[i];
+      const empty = !c;
+      return {
+        competitorId: c?.id || "",
+        empty,
+        title: c?.name || (i === 0 || canOpenSlot ? (state.competitors.length === 0 && i === 0 ? "Add a store" : "Open slot") : "Locked slot"),
+        meta: c
+          ? `Next ${formatWhen(c.nextScrapeAt)}`
+          : canOpenSlot
+            ? "Click to add a competitor"
+            : "Upgrade to unlock this slot",
+        live: Boolean(c?.enabled),
+        spark: laneSparks[i % laneSparks.length],
+        stroke: ["#2B59FF", "#1A3FD9", "#60A5FA", "#3B82F6", "#2563EB", "#93C5FD"][
+          i % 6
+        ],
+        action: empty
+          ? canOpenSlot
+            ? "new-competitor"
+            : "pricing"
+          : "competitors",
+      };
+    });
     const sUsed = state.planUsage?.scrapeNow?.used ?? 0;
     const sLimit =
       state.planUsage?.scrapeNow?.limit ?? planLimitsFor().scrapeNow;
@@ -801,20 +820,26 @@
           ${lanes
             .map(
               (lane) => `
-            <article class="lane-card">
+            <button
+              type="button"
+              class="lane-card${lane.empty ? " is-empty" : ""}${lane.action === "pricing" ? " is-locked" : ""}"
+              data-dash-action="${escapeHtml(lane.action)}"
+              ${lane.competitorId ? `data-competitor-id="${escapeHtml(lane.competitorId)}"` : ""}
+              aria-label="${escapeHtml(lane.empty ? lane.title : `Open ${lane.title}`)}"
+            >
               <div class="lane-card-top">
                 <div>
                   <strong>${escapeHtml(lane.title)}</strong>
                   <p class="muted">${escapeHtml(lane.meta)}</p>
                 </div>
                 <span class="lane-status ${lane.live ? "is-live" : "is-idle"}">
-                  ${lane.live ? "● Live" : "○ Idle"}
+                  ${lane.live ? "● Live" : lane.empty ? (lane.action === "pricing" ? "○ Locked" : "○ Open") : "○ Idle"}
                 </span>
               </div>
               <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden>
                 <path d="${sparklinePath(lane.spark, 140, 40)}" fill="none" stroke="${lane.stroke}" stroke-width="2.5" stroke-linecap="round" />
               </svg>
-            </article>
+            </button>
           `,
             )
             .join("")}
@@ -2738,6 +2763,22 @@
           state.showAddForm = true;
           render();
           scrollPageToTop();
+          requestAnimationFrame(() => {
+            document.getElementById("add-competitor-panel")?.scrollIntoView({
+              behavior: "smooth",
+              block: "start",
+            });
+            document.querySelector("#add-form input[name='name']")?.focus();
+          });
+          return;
+        }
+        if (action === "competitors") {
+          const competitorId = btn.getAttribute("data-competitor-id") || "";
+          if (competitorId) state.filterCompetitorId = competitorId;
+          state.nav = "competitors";
+          state.showAddForm = false;
+          render();
+          scrollPageToTop();
           return;
         }
         if (action === "products") {
@@ -3326,10 +3367,11 @@
   }
 
   async function onGenerateInvite({ note = "" } = {}) {
-    if (!isPlanAdmin()) return;
+    if (!isPlanAdmin() || state.generatingInvite) return;
     state.generatingInvite = true;
     setError(null);
     render();
+    let inviteUrl = "";
     try {
       const res = await apiFetch("/api/invites/generate", {
         method: "POST",
@@ -3339,17 +3381,15 @@
       const json = await readJson(res);
       if (json.planUsage) applyPlanUsage(json.planUsage);
       if (!res.ok) throw new Error(json.error || "Could not generate invite");
-      const inviteUrl = json.inviteUrl || "";
-      await load();
+      inviteUrl = json.inviteUrl || "";
       state.lastInviteUrl = inviteUrl;
-      render();
+      await load();
       if (inviteUrl) void copyText(inviteUrl);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not generate invite");
-      state.generatingInvite = false;
-      render();
     } finally {
       state.generatingInvite = false;
+      render();
     }
   }
 
