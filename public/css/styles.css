@@ -5396,3 +5396,40 @@ button.linkish {
   font-size: 0.75rem;
   color: #334155;
 }
+
+.lane-empty-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  border-radius: 10px;
+  background: var(--surface-60-tint);
+  border: 1px dashed var(--line-subtle);
+  color: var(--structure-30);
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  transition: all 0.18s var(--ease);
+}
+
+.lane-card.is-empty:hover .lane-empty-placeholder {
+  background: var(--structure-30);
+  color: #fff;
+  border-color: var(--structure-30);
+}
+
+.lane-add-icon {
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+@keyframes panel-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(43, 89, 255, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(43, 89, 255, 0.2); }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.highlight-panel {
+  animation: panel-pulse 1.2s ease-out;
+}

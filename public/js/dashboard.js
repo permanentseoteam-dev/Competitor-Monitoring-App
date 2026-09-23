@@ -837,9 +837,20 @@
                   ${lane.live ? "● Live" : lane.empty ? (lane.action === "pricing" ? "○ Locked" : "○ Open") : "○ Idle"}
                 </span>
               </div>
-              <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden>
-                <path d="${sparklinePath(lane.spark, 140, 40)}" fill="none" stroke="${lane.stroke}" stroke-width="2.5" stroke-linecap="round" />
-              </svg>
+              ${
+                lane.empty
+                  ? `
+                <div class="lane-empty-placeholder" aria-hidden="true">
+                  <span class="lane-add-icon">${lane.action === "pricing" ? "🔒" : "+"}</span>
+                  <span class="lane-add-label">${lane.action === "pricing" ? "Upgrade to unlock" : "Add competitor to slot"}</span>
+                </div>
+              `
+                  : `
+                <svg width="140" height="40" viewBox="0 0 140 40" aria-hidden>
+                  <path d="${sparklinePath(lane.spark, 140, 40)}" fill="none" stroke="${lane.stroke}" stroke-width="2.5" stroke-linecap="round" />
+                </svg>
+              `
+              }
             </button>
           `,
             )
@@ -2777,10 +2788,12 @@
           render();
           scrollPageToTop();
           requestAnimationFrame(() => {
-            document.getElementById("add-competitor-panel")?.scrollIntoView({
-              behavior: "smooth",
-              block: "start",
-            });
+            const addPanel = document.getElementById("add-competitor-panel");
+            if (addPanel) {
+              addPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+              addPanel.classList.add("highlight-panel");
+              setTimeout(() => addPanel.classList.remove("highlight-panel"), 1500);
+            }
             document.querySelector("#add-form input[name='name']")?.focus();
           });
           return;
