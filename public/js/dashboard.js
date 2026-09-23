@@ -57,6 +57,7 @@
     savingProfile: false,
     invitingUser: false,
     generatingInvite: false,
+    inviteError: "",
     lastInviteUrl: "",
     invites: [],
     revenue: null,
@@ -1294,17 +1295,26 @@
             : ""
         }
 
-        <section class="panel-card">
+        <section class="panel-card" id="invite-user-section">
           <h2 class="section-title">Invite User</h2>
           <p class="panel-sub">
             Generate a shareable invite link. The recipient opens it, picks a username and password, and joins as a User.
             Links expire in 7 days and reserve one seat until used or revoked.
           </p>
+          ${
+            state.inviteError
+              ? `
+            <p class="error invite-card-error" id="invite-card-error" style="margin-bottom:var(--space-3);">
+              ${escapeHtml(state.inviteError)}
+            </p>
+          `
+              : ""
+          }
           <form class="add-form settings-form invite-generate-form" id="generate-invite-form">
             <label>Optional note
-              <input name="note" placeholder="e.g. Catalog analyst — March hire" maxlength="120" />
+              <input name="note" id="invite-note-input" placeholder="e.g. Catalog analyst — March hire" maxlength="120" />
             </label>
-            <button type="submit" class="btn primary" ${
+            <button type="submit" class="btn primary" id="generate-invite-btn" ${
               state.generatingInvite || !canInviteMoreUsers() ? "disabled" : ""
             }>
               ${
@@ -1666,7 +1676,10 @@
     if (!seats) {
       const limit = planLimitsFor().seats;
       if (limit == null) return true;
-      return state.profiles.length < limit;
+      const pendingCount = (state.invites || []).filter(
+        (inv) => !inv.usedAt && Date.parse(inv.expiresAt) > Date.now(),
+      ).length;
+      return (state.profiles.length + pendingCount) < limit;
     }
     if (seats.unlimited || seats.limit == null) return true;
     return seats.used < seats.limit;
@@ -3368,9 +3381,25 @@
 
   async function onGenerateInvite({ note = "" } = {}) {
     if (!isPlanAdmin() || state.generatingInvite) return;
+    if (!canInviteMoreUsers()) {
+      state.inviteError = "Seat limit reached on your plan. Upgrade or revoke a pending invite to invite more users.";
+      render();
+      return;
+    }
+
     state.generatingInvite = true;
-    setError(null);
-    render();
+    state.inviteError = "";
+
+    // Smooth inline button state: update in-place without tearing down DOM or wiping user inputs
+    const btn = document.getElementById("generate-invite-btn") ||
+      document.querySelector("#generate-invite-form button[type='submit']");
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "Generating…";
+    }
+    const inlineErr = document.getElementById("invite-card-error");
+    if (inlineErr) inlineErr.remove();
+
     let inviteUrl = "";
     try {
       const res = await apiFetch("/api/invites/generate", {
@@ -3381,21 +3410,62 @@
       const json = await readJson(res);
       if (json.planUsage) applyPlanUsage(json.planUsage);
       if (!res.ok) throw new Error(json.error || "Could not generate invite");
+
       inviteUrl = json.inviteUrl || "";
       state.lastInviteUrl = inviteUrl;
-      await load();
-      if (inviteUrl) void copyText(inviteUrl);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not generate invite");
-    } finally {
+      state.inviteError = "";
+
+      if (json.invite) {
+        state.invites = [
+          json.invite,
+          ...(state.invites || []).filter((inv) => inv.id !== json.invite.id),
+        ];
+      }
+
+      // Background sync fresh profiles and usage without tearing down view
+      try {
+        const pRes = await apiFetch("/api/profiles");
+        if (pRes.ok) {
+          const pJson = await readJson(pRes);
+          if (pJson.invites) state.invites = pJson.invites;
+          if (pJson.profiles) state.profiles = pJson.profiles;
+          if (pJson.planUsage) applyPlanUsage(pJson.planUsage);
+        }
+      } catch {
+        /* ignore background refresh */
+      }
+
       state.generatingInvite = false;
       render();
+
+      if (inviteUrl) {
+        void copyText(inviteUrl);
+        requestAnimationFrame(() => {
+          document.getElementById("invite-link-box")?.scrollIntoView({
+            behavior: "smooth",
+            block: "nearest",
+          });
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Could not generate invite";
+      state.inviteError = msg;
+      state.generatingInvite = false;
+      render();
+    } finally {
+      state.generatingInvite = false;
+      const finalBtn = document.getElementById("generate-invite-btn");
+      if (finalBtn) {
+        finalBtn.disabled = !canInviteMoreUsers();
+        finalBtn.textContent = canInviteMoreUsers() ? "Generate invite link" : "Seat limit reached";
+      }
     }
   }
 
   async function onRevokeInvite(id) {
     if (!id || !window.confirm("Revoke this invite link?")) return;
     setError(null);
+    state.inviteError = "";
     try {
       const res = await apiFetch("/api/invites", {
         method: "DELETE",
@@ -3408,9 +3478,10 @@
       if (state.lastInviteUrl && state.invites.some((i) => i.id === id)) {
         state.lastInviteUrl = "";
       }
-      await load();
+      state.invites = (state.invites || []).filter((i) => i.id !== id);
+      render();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not revoke invite");
+      state.inviteError = err instanceof Error ? err.message : "Could not revoke invite";
       render();
     }
   }
